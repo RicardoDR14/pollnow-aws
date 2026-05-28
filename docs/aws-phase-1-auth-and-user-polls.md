@@ -1,15 +1,30 @@
-# AWS Phase 1 — Auth and User Poll Separation
+# AWS Phase 1 — Authentication and User Poll Separation
 
-## Goal
+## Purpose
 
-This phase adds simple user authentication and separates polls by user.
+This guide explains the manual AWS changes required for Phase 1 of the PollNow project.
 
-After this phase:
+After this phase, the application will support:
 
-- users can register with username, email and password;
-- users can log in;
-- each poll stores an `ownerId`;
-- `GET /polls` only returns polls created by the logged-in user.
+- user registration with username, email and password;
+- user login;
+- polls linked to a specific owner through `ownerId`;
+- dashboard filtering, so each user only sees their own polls.
+
+---
+
+## Summary of changes
+
+| Area | Change | Responsible |
+|---|---|---|
+| DynamoDB | Create a new `users` table | AWS account owner |
+| Lambda | Create `registerUser` | AWS account owner |
+| Lambda | Create `loginUser` | AWS account owner |
+| Lambda | Update `createPoll` | AWS account owner |
+| Lambda | Update `listPolls` | AWS account owner |
+| API Gateway | Add authentication routes | AWS account owner |
+| API Gateway | Update CORS headers | AWS account owner |
+| GitHub | Store Lambda source code | Repository |
 
 ---
 
@@ -19,18 +34,20 @@ Go to:
 
 ```text
 AWS Console → DynamoDB → Create table
+```
 
-Use:
+Use the following configuration:
 
-Table name: users
-Partition key: userId
-Partition key type: String
-Table settings: Default settings
-
-Create the table.
+| Setting | Value |
+|---|---|
+| Table name | `users` |
+| Partition key | `userId` |
+| Partition key type | `String` |
+| Table settings | Default settings |
 
 Expected item structure:
 
+```json
 {
   "userId": "uuid",
   "username": "ruben",
@@ -38,171 +55,246 @@ Expected item structure:
   "passwordHash": "salt:hash",
   "createdAt": "2026-05-28T20:00:00.000Z"
 }
-2. Create Lambda registerUser
+```
 
-Create a new Lambda:
+---
 
+## 2. Create Lambda `registerUser`
+
+Create a new Lambda function:
+
+```text
 Lambda → Create function → Author from scratch
-Function name: registerUser
-Runtime: Node.js 22.x
-Permissions: Use existing role → LabRole
+```
+
+Use:
+
+| Setting | Value |
+|---|---|
+| Function name | `registerUser` |
+| Runtime | `Node.js 22.x` |
+| Permissions | Use existing role → `LabRole` |
 
 Copy the code from:
 
+```text
 backend/lambdas/registerUser/index.mjs
+```
 
-Deploy the Lambda.
+Then click **Deploy**.
 
-Environment variables
+### Environment variables
 
 Add:
 
-USERS_TABLE = users
-3. Create Lambda loginUser
+| Key | Value |
+|---|---|
+| `USERS_TABLE` | `users` |
 
-Create a new Lambda:
+---
 
+## 3. Create Lambda `loginUser`
+
+Create a new Lambda function:
+
+```text
 Lambda → Create function → Author from scratch
-Function name: loginUser
-Runtime: Node.js 22.x
-Permissions: Use existing role → LabRole
+```
+
+Use:
+
+| Setting | Value |
+|---|---|
+| Function name | `loginUser` |
+| Runtime | `Node.js 22.x` |
+| Permissions | Use existing role → `LabRole` |
 
 Copy the code from:
 
+```text
 backend/lambdas/loginUser/index.mjs
+```
 
-Deploy the Lambda.
+Then click **Deploy**.
 
-Environment variables
+### Environment variables
 
 Add:
 
-USERS_TABLE = users
-4. Update Lambda createPoll
+| Key | Value |
+|---|---|
+| `USERS_TABLE` | `users` |
 
-Open Lambda:
+---
 
+## 4. Update Lambda `createPoll`
+
+Open the existing Lambda:
+
+```text
 createPoll
+```
 
-Replace the code with:
+Replace the existing code with the code from:
 
+```text
 backend/lambdas/createPoll/index.mjs
+```
 
-Deploy the Lambda.
+Then click **Deploy**.
 
-Existing environment variables
+### Existing environment variables
 
-Confirm that it still has:
+Confirm that the Lambda still has:
 
-POLLS_TABLE = polls
-S3_BUCKET = pollnow-banners-ricardodr14
+| Key | Value |
+|---|---|
+| `POLLS_TABLE` | `polls` |
+| `S3_BUCKET` | `pollnow-banners-ricardodr14` |
 
-No USERS_TABLE is needed in this Lambda.
+`USERS_TABLE` is not required in this Lambda.
 
-5. Update Lambda listPolls
+---
 
-Open Lambda:
+## 5. Update Lambda `listPolls`
 
+Open the existing Lambda:
+
+```text
 listPolls
+```
 
-Replace the code with:
+Replace the existing code with the code from:
 
+```text
 backend/lambdas/listPolls/index.mjs
+```
 
-Deploy the Lambda.
+Then click **Deploy**.
 
-Existing environment variables
+### Existing environment variables
 
-Confirm that it still has:
+Confirm that the Lambda still has:
 
-POLLS_TABLE = polls
-6. API Gateway routes
+| Key | Value |
+|---|---|
+| `POLLS_TABLE` | `polls` |
 
-Open API Gateway:
+---
 
+## 6. Configure API Gateway routes
+
+Open:
+
+```text
 API Gateway → pollnow-api
+```
 
-Add these routes:
+Add these new routes:
 
-POST /auth/register → registerUser
-POST /auth/login    → loginUser
+| Method | Path | Integration |
+|---|---|---|
+| `POST` | `/auth/register` | `registerUser` |
+| `POST` | `/auth/login` | `loginUser` |
 
-Existing route:
+Keep the existing routes:
 
-POST /polls → createPoll
-GET /polls  → listPolls
+| Method | Path | Integration |
+|---|---|---|
+| `POST` | `/polls` | `createPoll` |
+| `GET` | `/polls` | `listPolls` |
 
-must remain unchanged, but they now expect the frontend to send the user id.
+Important: after this phase, `POST /polls` and `GET /polls` expect the frontend to send the user id in the `x-user-id` header.
 
-7. CORS configuration
+---
 
-Update CORS in API Gateway.
+## 7. Update CORS configuration
 
-Allowed origins:
+In API Gateway, update CORS with:
 
-*
+| CORS setting | Value |
+|---|---|
+| Allowed origins | `*` |
+| Allowed methods | `GET, POST, PUT, PATCH, DELETE, OPTIONS` |
+| Allowed headers | `Content-Type, x-user-id` |
 
-Allowed methods:
+---
 
-GET, POST, PUT, PATCH, DELETE, OPTIONS
-
-Allowed headers:
-
-Content-Type, x-user-id
-8. Test register
+## 8. Test registration
 
 Request:
 
+```http
 POST /auth/register
 Content-Type: application/json
+```
 
 Body:
 
+```json
 {
   "username": "ruben",
   "email": "ruben@email.com",
   "password": "123456"
 }
+```
 
 Expected response:
 
+```json
 {
   "userId": "uuid",
   "username": "ruben",
   "email": "ruben@email.com",
   "createdAt": "timestamp"
 }
-9. Test login
+```
+
+---
+
+## 9. Test login
 
 Request:
 
+```http
 POST /auth/login
 Content-Type: application/json
+```
 
 Body:
 
+```json
 {
   "identifier": "ruben@email.com",
   "password": "123456"
 }
+```
 
 Expected response:
 
+```json
 {
   "userId": "uuid",
   "username": "ruben",
   "email": "ruben@email.com"
 }
-10. Test create poll with owner
+```
+
+---
+
+## 10. Test poll creation with owner
 
 Request:
 
+```http
 POST /polls
 Content-Type: application/json
 x-user-id: USER_ID_FROM_LOGIN
+```
 
 Body:
 
+```json
 {
   "title": "Melhor dia para reunião?",
   "options": ["Segunda", "Terça", "Quarta"],
@@ -210,49 +302,64 @@ Body:
   "ownerEmail": "ruben@email.com",
   "ownerUsername": "ruben"
 }
+```
 
 Expected result:
 
-HTTP 201;
-new item in polls;
-item has ownerId.
-11. Test list user polls
-
-Request:
-
-GET /polls
-x-user-id: USER_ID_FROM_LOGIN
-
-Expected result:
-
-only polls where ownerId matches the logged user.
-12. Important note about old polls
-
-Polls created before this phase do not have ownerId.
-
-That means they will not appear in the user dashboard after this update.
-
-To keep old polls visible, manually edit them in DynamoDB and add:
-
-ownerId = userId
-ownerEmail = user email
-ownerUsername = username
-
-Otherwise, create new polls after logging in.
-
+- HTTP `201`;
+- new item created in the `polls` table;
+- the item includes `ownerId`.
 
 ---
 
-# 6. Commit sugerido
+## 11. Test listing polls by user
 
-Depois de criares/substituíres estes ficheiros:
+Request:
 
-```bash
-git add backend/lambdas/registerUser/index.mjs \
-        backend/lambdas/loginUser/index.mjs \
-        backend/lambdas/createPoll/index.mjs \
-        backend/lambdas/listPolls/index.mjs \
-        docs/aws-phase-1-auth-and-user-polls.md
+```http
+GET /polls
+x-user-id: USER_ID_FROM_LOGIN
+```
 
-git commit -m "feat: add simple auth and user scoped polls"
-git push
+Expected result:
+
+- only polls where `ownerId` matches the logged-in user are returned.
+
+---
+
+## 12. Important note about old polls
+
+Polls created before this phase do not have `ownerId`.
+
+This means they will not appear in the user dashboard after this update.
+
+To keep old polls visible, manually edit them in DynamoDB and add:
+
+| Attribute | Value |
+|---|---|
+| `ownerId` | user id from the logged-in user |
+| `ownerEmail` | user email |
+| `ownerUsername` | username |
+
+Alternatively, create new polls after logging in.
+
+---
+
+## Final checklist
+
+Before moving to the frontend phase, confirm:
+
+- [ ] DynamoDB table `users` exists.
+- [ ] Lambda `registerUser` exists and is deployed.
+- [ ] Lambda `loginUser` exists and is deployed.
+- [ ] `registerUser` has `USERS_TABLE=users`.
+- [ ] `loginUser` has `USERS_TABLE=users`.
+- [ ] `createPoll` was updated and deployed.
+- [ ] `listPolls` was updated and deployed.
+- [ ] API Gateway has `POST /auth/register`.
+- [ ] API Gateway has `POST /auth/login`.
+- [ ] CORS allows `Content-Type` and `x-user-id`.
+- [ ] Register test works.
+- [ ] Login test works.
+- [ ] Creating a poll with `x-user-id` works.
+- [ ] Listing polls with `x-user-id` returns only that user's polls.
