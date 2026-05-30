@@ -3,21 +3,45 @@ import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
 
 const API = process.env.REACT_APP_API_URL;
-const STORAGE_KEY = "pollnow_voted";
+const VOTES_STORAGE_KEY = "pollnow_votes";
+const VOTER_ID_KEY = "pollnow_voter_id";
+
+function getOrCreateVoterId() {
+  let voterId = localStorage.getItem(VOTER_ID_KEY);
+
+  if (!voterId) {
+    voterId = crypto.randomUUID();
+    localStorage.setItem(VOTER_ID_KEY, voterId);
+  }
+
+  return voterId;
+}
+
+function getStoredVotes() {
+  return JSON.parse(localStorage.getItem(VOTES_STORAGE_KEY) || "{}");
+}
 
 function Vote() {
   const { pollId } = useParams();
   const navigate = useNavigate();
+
   const [poll, setPoll] = useState(null);
   const [selected, setSelected] = useState("");
+  const [previousVote, setPreviousVote] = useState("");
   const [loading, setLoading] = useState(true);
   const [voting, setVoting] = useState(false);
   const [error, setError] = useState("");
-  const [alreadyVoted, setAlreadyVoted] = useState(false);
+  const [success, setSuccess] = useState("");
 
   useEffect(() => {
-    const voted = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
-    if (voted.includes(pollId)) setAlreadyVoted(true);
+    const storedVotes = getStoredVotes();
+    const storedVote = storedVotes[pollId];
+
+    if (storedVote?.option) {
+      setPreviousVote(storedVote.option);
+      setSelected(storedVote.option);
+    }
+
     fetchPoll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pollId]);
@@ -29,36 +53,66 @@ function Vote() {
     } catch {
       setError("Sondagem não encontrada");
     }
+
     setLoading(false);
   };
 
   const handleVote = async () => {
-    if (!selected) return setError("Seleciona uma opção");
+    if (!selected) {
+      return setError("Seleciona uma opção");
+    }
+
     setVoting(true);
     setError("");
+    setSuccess("");
+
     try {
-      await axios.post(`${API}/polls/${pollId}/vote`, { option: selected });
-      const voted = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
-      localStorage.setItem(STORAGE_KEY, JSON.stringify([...voted, pollId]));
-      navigate(`/results/${pollId}`);
+      const voterId = getOrCreateVoterId();
+
+      await axios.post(`${API}/polls/${pollId}/vote`, {
+        option: selected,
+        voterId,
+      });
+
+      const storedVotes = getStoredVotes();
+
+      localStorage.setItem(
+        VOTES_STORAGE_KEY,
+        JSON.stringify({
+          ...storedVotes,
+          [pollId]: {
+            option: selected,
+            voterId,
+            updatedAt: new Date().toISOString(),
+          },
+        }),
+      );
+
+      setPreviousVote(selected);
+      setSuccess("Voto guardado com sucesso!");
+      setTimeout(() => navigate(`/results/${pollId}`), 700);
     } catch (err) {
       setError(err.response?.data?.error || "Erro ao registar voto");
     }
+
     setVoting(false);
   };
 
-  if (loading)
+  if (loading) {
     return (
       <div className="card">
         <p>A carregar...</p>
       </div>
     );
-  if (error && !poll)
+  }
+
+  if (error && !poll) {
     return (
       <div className="card">
         <p className="error">{error}</p>
       </div>
     );
+  }
 
   const isClosed =
     poll.status !== "open" || new Date() > new Date(poll.closesAt);
@@ -66,29 +120,16 @@ function Vote() {
   return (
     <div className="card">
       <h1>{poll.title}</h1>
+
+      {poll.description && (
+        <p style={{ color: "#666", marginBottom: "1rem" }}>
+          {poll.description}
+        </p>
+      )}
+
       <p style={{ color: "#888", marginBottom: "1.5rem" }}>
         Fecha: {new Date(poll.closesAt).toLocaleString("pt-PT")}
       </p>
-
-      {alreadyVoted && (
-        <div
-          style={{
-            background: "#fef3c7",
-            padding: "1rem",
-            borderRadius: "8px",
-            marginBottom: "1rem",
-          }}
-        >
-          ⚠️ Já votaste nesta sondagem.
-          <button
-            className="btn btn-secondary"
-            style={{ marginLeft: "1rem" }}
-            onClick={() => navigate(`/results/${pollId}`)}
-          >
-            Ver resultados
-          </button>
-        </div>
-      )}
 
       {isClosed && (
         <div
@@ -99,11 +140,26 @@ function Vote() {
             marginBottom: "1rem",
           }}
         >
-          🔒 Esta sondagem já está fechada.
+          🔒 Esta sondagem já está fechada. Já não é possível votar ou alterar o voto.
         </div>
       )}
 
-      {!alreadyVoted && !isClosed && (
+      {!isClosed && previousVote && (
+        <div
+          style={{
+            background: "#fef3c7",
+            padding: "1rem",
+            borderRadius: "8px",
+            marginBottom: "1rem",
+          }}
+        >
+          ⚠️ Já votaste nesta sondagem. Podes alterar o teu voto enquanto a sondagem estiver aberta.
+          <br />
+          <strong>Voto atual:</strong> {previousVote}
+        </div>
+      )}
+
+      {!isClosed && (
         <div>
           {poll.options.map((opt) => (
             <div
@@ -121,22 +177,33 @@ function Vote() {
               }}
             >
               {opt}
+              {previousVote === opt && (
+                <span style={{ color: "#10b981", marginLeft: "0.5rem" }}>
+                  voto atual
+                </span>
+              )}
             </div>
           ))}
 
           {error && <p className="error">{error}</p>}
+          {success && <p className="success">{success}</p>}
 
           <button
             className="btn btn-primary"
             onClick={handleVote}
             disabled={voting}
           >
-            {voting ? "A votar..." : "Votar"}
+            {voting
+              ? "A guardar..."
+              : previousVote
+                ? "Alterar voto"
+                : "Votar"}
           </button>
         </div>
       )}
 
       <br />
+
       <button
         className="btn btn-secondary"
         onClick={() => navigate(`/results/${pollId}`)}
