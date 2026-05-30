@@ -1,9 +1,11 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import Navbar from './components/Navbar';
-import Home from './pages/Home';
-import Vote from './pages/Vote';
-import Results from './pages/Results';
-import './App.css';
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import Navbar from "./components/Navbar";
+import Home from "./pages/Home";
+import Vote from "./pages/Vote";
+import Results from "./pages/Results";
+import Login from "./pages/Login";
+import Register from "./pages/Register";
+import "./App.css";
 
 function App() {
   return (
@@ -14,6 +16,8 @@ function App() {
           <Route path="/" element={<Home />} />
           <Route path="/vote/:pollId" element={<Vote />} />
           <Route path="/results/:pollId" element={<Results />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
         </Routes>
       </div>
     </BrowserRouter>
