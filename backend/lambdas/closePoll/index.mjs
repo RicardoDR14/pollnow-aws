@@ -3,8 +3,10 @@ import {
   GetItemCommand,
   UpdateItemCommand,
 } from "@aws-sdk/client-dynamodb";
+import { SNSClient, PublishCommand } from "@aws-sdk/client-sns";
 
 const dynamo = new DynamoDBClient({});
+const sns = new SNSClient({ region: process.env.SNS_REGION || "us-east-1" });
 
 function corsResponse(statusCode, body) {
   return {
@@ -16,6 +18,26 @@ function corsResponse(statusCode, body) {
     },
     body: JSON.stringify(body),
   };
+}
+
+function getResultsUrl(pollId) {
+  const frontendUrl = process.env.FRONTEND_URL || "";
+  return frontendUrl ? `${frontendUrl}/results/${pollId}` : `/results/${pollId}`;
+}
+
+async function publishNotification({ subject, message }) {
+  if (!process.env.SNS_TOPIC_ARN) {
+    console.log("SNS_TOPIC_ARN not configured. Notification skipped.");
+    return;
+  }
+
+  await sns.send(
+    new PublishCommand({
+      TopicArn: process.env.SNS_TOPIC_ARN,
+      Subject: subject,
+      Message: message,
+    }),
+  );
 }
 
 export const handler = async (event) => {
@@ -79,6 +101,18 @@ export const handler = async (event) => {
         },
       }),
     );
+
+    await publishNotification({
+      subject: `PollNow — Sondagem fechada manualmente`,
+      message:
+        `Uma sondagem foi fechada manualmente no PollNow.\n\n` +
+        `Título: ${Item.title?.S || "N/A"}\n` +
+        `Autor: ${Item.ownerUsername?.S || "N/A"}\n` +
+        `Email do autor: ${Item.ownerEmail?.S || Item.authorPhone?.S || "N/A"}\n` +
+        `Fechada em: ${closedAt}\n\n` +
+        `Link para resultados:\n${getResultsUrl(pollId)}\n\n` +
+        `ID da sondagem: ${pollId}`,
+    });
 
     return corsResponse(200, {
       success: true,

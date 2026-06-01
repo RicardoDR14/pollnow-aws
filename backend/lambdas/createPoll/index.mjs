@@ -1,8 +1,10 @@
 import { DynamoDBClient, PutItemCommand } from "@aws-sdk/client-dynamodb";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { SNSClient, PublishCommand } from "@aws-sdk/client-sns";
 
 const dynamo = new DynamoDBClient({});
 const s3 = new S3Client({});
+const sns = new SNSClient({ region: process.env.SNS_REGION || "us-east-1" });
 
 function corsResponse(statusCode, body) {
   return {
@@ -14,6 +16,26 @@ function corsResponse(statusCode, body) {
     },
     body: JSON.stringify(body),
   };
+}
+
+function getVoteUrl(pollId) {
+  const frontendUrl = process.env.FRONTEND_URL || "";
+  return frontendUrl ? `${frontendUrl}/vote/${pollId}` : `/vote/${pollId}`;
+}
+
+async function publishNotification({ subject, message }) {
+  if (!process.env.SNS_TOPIC_ARN) {
+    console.log("SNS_TOPIC_ARN not configured. Notification skipped.");
+    return;
+  }
+
+  await sns.send(
+    new PublishCommand({
+      TopicArn: process.env.SNS_TOPIC_ARN,
+      Subject: subject,
+      Message: message,
+    }),
+  );
 }
 
 export const handler = async (event) => {
@@ -80,6 +102,12 @@ export const handler = async (event) => {
     const pollId = crypto.randomUUID();
     const createdAt = new Date().toISOString();
 
+    const title = body.title.trim();
+    const description = body.description?.trim() || "";
+    const ownerUsername = body.ownerUsername || "";
+    const ownerEmail = body.ownerEmail || body.authorPhone || "";
+    const voteUrl = getVoteUrl(pollId);
+
     let imageUrl = "";
 
     if (body.image) {
@@ -104,19 +132,32 @@ export const handler = async (event) => {
         Item: {
           pollId: { S: pollId },
           ownerId: { S: ownerId },
-          ownerUsername: { S: body.ownerUsername || "" },
-          ownerEmail: { S: body.ownerEmail || body.authorPhone || "" },
-          title: { S: body.title.trim() },
-          description: { S: body.description?.trim() || "" },
+          ownerUsername: { S: ownerUsername },
+          ownerEmail: { S: ownerEmail },
+          title: { S: title },
+          description: { S: description },
           options: { L: cleanOptions.map((option) => ({ S: option })) },
           closesAt: { S: closesAt.toISOString() },
-          authorPhone: { S: body.authorPhone || body.ownerEmail || "" },
+          authorPhone: { S: body.authorPhone || ownerEmail },
           imageUrl: { S: imageUrl },
           status: { S: "open" },
           createdAt: { S: createdAt },
         },
       }),
     );
+
+    await publishNotification({
+      subject: `PollNow — Nova sondagem criada`,
+      message:
+        `Uma nova sondagem foi criada no PollNow.\n\n` +
+        `Título: ${title}\n` +
+        `Criada por: ${ownerUsername || "N/A"}\n` +
+        `Email do autor: ${ownerEmail || "N/A"}\n` +
+        `Fecha em: ${closesAt.toLocaleString("pt-PT")}\n` +
+        `Opções: ${cleanOptions.join(", ")}\n\n` +
+        `Link público para votar:\n${voteUrl}\n\n` +
+        `ID da sondagem: ${pollId}`,
+    });
 
     return corsResponse(201, {
       pollId,

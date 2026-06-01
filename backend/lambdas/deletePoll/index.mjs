@@ -5,8 +5,10 @@ import {
   ScanCommand,
   BatchWriteItemCommand,
 } from "@aws-sdk/client-dynamodb";
+import { SNSClient, PublishCommand } from "@aws-sdk/client-sns";
 
 const dynamo = new DynamoDBClient({});
+const sns = new SNSClient({ region: process.env.SNS_REGION || "us-east-1" });
 
 function corsResponse(statusCode, body) {
   return {
@@ -18,6 +20,21 @@ function corsResponse(statusCode, body) {
     },
     body: JSON.stringify(body),
   };
+}
+
+async function publishNotification({ subject, message }) {
+  if (!process.env.SNS_TOPIC_ARN) {
+    console.log("SNS_TOPIC_ARN not configured. Notification skipped.");
+    return;
+  }
+
+  await sns.send(
+    new PublishCommand({
+      TopicArn: process.env.SNS_TOPIC_ARN,
+      Subject: subject,
+      Message: message,
+    }),
+  );
 }
 
 async function deleteVotesForPoll(pollId) {
@@ -100,7 +117,20 @@ export const handler = async (event) => {
       });
     }
 
+    const deletedAt = new Date().toISOString();
     const deletedVotes = await deleteVotesForPoll(pollId);
+
+    await publishNotification({
+      subject: `PollNow — Sondagem eliminada`,
+      message:
+        `Uma sondagem foi eliminada no PollNow.\n\n` +
+        `Título: ${Item.title?.S || "N/A"}\n` +
+        `Autor: ${Item.ownerUsername?.S || "N/A"}\n` +
+        `Email do autor: ${Item.ownerEmail?.S || Item.authorPhone?.S || "N/A"}\n` +
+        `Eliminada em: ${deletedAt}\n` +
+        `Votos eliminados: ${deletedVotes}\n\n` +
+        `ID da sondagem: ${pollId}`,
+    });
 
     await dynamo.send(
       new DeleteItemCommand({

@@ -3,8 +3,10 @@ import {
   GetItemCommand,
   UpdateItemCommand,
 } from "@aws-sdk/client-dynamodb";
+import { SNSClient, PublishCommand } from "@aws-sdk/client-sns";
 
 const dynamo = new DynamoDBClient({});
+const sns = new SNSClient({ region: process.env.SNS_REGION || "us-east-1" });
 
 function corsResponse(statusCode, body) {
   return {
@@ -16,6 +18,26 @@ function corsResponse(statusCode, body) {
     },
     body: JSON.stringify(body),
   };
+}
+
+function getVoteUrl(pollId) {
+  const frontendUrl = process.env.FRONTEND_URL || "";
+  return frontendUrl ? `${frontendUrl}/vote/${pollId}` : `/vote/${pollId}`;
+}
+
+async function publishNotification({ subject, message }) {
+  if (!process.env.SNS_TOPIC_ARN) {
+    console.log("SNS_TOPIC_ARN not configured. Notification skipped.");
+    return;
+  }
+
+  await sns.send(
+    new PublishCommand({
+      TopicArn: process.env.SNS_TOPIC_ARN,
+      Subject: subject,
+      Message: message,
+    }),
+  );
 }
 
 export const handler = async (event) => {
@@ -109,6 +131,11 @@ export const handler = async (event) => {
 
     const updatedAt = new Date().toISOString();
 
+    const oldTitle = Item.title?.S || "";
+    const oldClosesAt = Item.closesAt?.S || "";
+    const ownerUsername = body.ownerUsername || Item.ownerUsername?.S || "";
+    const ownerEmail = body.ownerEmail || body.authorPhone || Item.ownerEmail?.S || "";
+
     await dynamo.send(
       new UpdateItemCommand({
         TableName: process.env.POLLS_TABLE,
@@ -130,11 +157,26 @@ export const handler = async (event) => {
           },
           ":closesAt": { S: closesAt.toISOString() },
           ":authorPhone": { S: body.authorPhone || body.ownerEmail || "" },
-          ":ownerEmail": { S: body.ownerEmail || body.authorPhone || "" },
+          ":ownerEmail": { S: ownerEmail },
           ":updatedAt": { S: updatedAt },
         },
       }),
     );
+
+    await publishNotification({
+      subject: `PollNow — Sondagem editada`,
+      message:
+        `Uma sondagem foi editada no PollNow.\n\n` +
+        `Título anterior: ${oldTitle}\n` +
+        `Título atual: ${body.title.trim()}\n` +
+        `Editada por: ${ownerUsername || "N/A"}\n` +
+        `Email do autor: ${ownerEmail || "N/A"}\n` +
+        `Fecho anterior: ${oldClosesAt || "N/A"}\n` +
+        `Novo fecho: ${closesAt.toISOString()}\n` +
+        `Novas opções: ${cleanOptions.join(", ")}\n\n` +
+        `Link público para votar:\n${getVoteUrl(pollId)}\n\n` +
+        `ID da sondagem: ${pollId}`,
+    });
 
     return corsResponse(200, {
       success: true,
