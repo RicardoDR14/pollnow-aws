@@ -15,7 +15,6 @@ function SharePoll() {
   const [error, setError] = useState("");
 
   const voteUrl = `${window.location.origin}/vote/${pollId}`;
-  const resultsUrl = `${window.location.origin}/results/${pollId}`;
 
   useEffect(() => {
     fetchPoll();
@@ -66,8 +65,15 @@ function SharePoll() {
   if (loading) {
     return (
       <div className="share-page">
-        <div className="share-shell">
-          <p>A carregar página de partilha...</p>
+        <div className="share-shell" style={{ textAlign: "center" }}>
+          <div className="share-brand" style={{ justifyContent: "center", marginBottom: "1.4rem" }}>
+            <span className="share-logo">☑</span>
+            <div>
+              <h1 style={{ margin: 0 }}>PollNow</h1>
+            </div>
+          </div>
+          <div className="share-spinner" />
+          <p style={{ color: "var(--soft-ink)", marginTop: "1rem" }}>A carregar página de partilha…</p>
         </div>
       </div>
     );

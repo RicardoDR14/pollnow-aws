@@ -48,8 +48,9 @@ function Results() {
 
   if (loading)
     return (
-      <div className="card">
-        <p>A carregar...</p>
+      <div className="card" style={{ textAlign: "center", padding: "3rem 1.8rem" }}>
+        <div className="share-spinner" />
+        <p style={{ color: "var(--soft-ink)", marginTop: "1rem" }}>A carregar...</p>
       </div>
     );
   if (error)

@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useToast } from "../hooks/useToast";
+import ToastStack from "../components/ToastStack";
 import axios from "axios";
 
 const API = process.env.REACT_APP_API_URL;
@@ -14,10 +16,8 @@ function Home() {
   const [loading, setLoading] = useState(false);
   const [loadingPolls, setLoadingPolls] = useState(true);
   const [editingPoll, setEditingPoll] = useState(null);
-  const [expandedQrPollId, setExpandedQrPollId] = useState(null);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
   const [shareUrl, setShareUrl] = useState("");
+  const { toasts, removeToast, toast } = useToast();
 
   const emptyForm = {
     title: "",
@@ -65,7 +65,6 @@ function Home() {
     if (!activeUser?.userId) return;
 
     setLoadingPolls(true);
-    setError("");
 
     try {
       const res = await axios.get(`${API}/polls`, {
@@ -76,7 +75,7 @@ function Home() {
         res.data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
       );
     } catch (err) {
-      setError(err.response?.data?.error || "Erro ao carregar sondagens");
+      toast.error(err.response?.data?.error || "Erro ao carregar sondagens");
     }
 
     setLoadingPolls(false);
@@ -155,8 +154,6 @@ function Home() {
   };
 
   const handleSubmit = async () => {
-    setError("");
-    setSuccess("");
     setShareUrl("");
 
     if (!user?.userId) {
@@ -166,7 +163,7 @@ function Home() {
 
     const validationError = validateForm();
     if (validationError) {
-      return setError(validationError);
+      return toast.error(validationError);
     }
 
     let pendingShareWindow = null;
@@ -174,9 +171,67 @@ function Home() {
     if (!editingPoll) {
       pendingShareWindow = window.open("about:blank", "_blank");
       if (pendingShareWindow) {
-        pendingShareWindow.document.write(
-          "<p style='font-family: Arial; padding: 24px;'>A preparar página de partilha...</p>",
-        );
+        pendingShareWindow.document.write(`<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PollNow</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&display=swap');
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
+      color: #172033;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background:
+        radial-gradient(circle at top left, rgba(188,235,203,0.75), transparent 32rem),
+        radial-gradient(circle at top right, rgba(135,214,141,0.35), transparent 28rem),
+        linear-gradient(180deg, #f7fff6, #eef7f1 48%, #f8fbfa);
+    }
+    .shell {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1.4rem;
+      text-align: center;
+      padding: 2rem;
+    }
+    .logo {
+      width: 64px;
+      height: 64px;
+      border-radius: 20px;
+      display: grid;
+      place-items: center;
+      background: linear-gradient(135deg, #87d68d, #bcebcb);
+      box-shadow: 0 10px 26px rgba(23,32,51,0.07);
+      font-size: 2rem;
+    }
+    h1 { font-size: 1.7rem; letter-spacing: -0.04em; }
+    p { color: #4a5568; font-size: 1rem; }
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid rgba(135,214,141,0.3);
+      border-top-color: #87d68d;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="logo">☑</div>
+    <h1>PollNow</h1>
+    <div class="spinner"></div>
+    <p>A preparar página de partilha…</p>
+  </div>
+</body>
+</html>`);
+        pendingShareWindow.document.close();
       }
     }
 
@@ -200,7 +255,7 @@ function Home() {
           },
         );
 
-        setSuccess("Sondagem editada com sucesso!");
+        toast.success("Sondagem editada com sucesso!");
         resetForm();
         fetchPolls(user);
       } else {
@@ -222,14 +277,14 @@ function Home() {
 
         const pollShareUrl = getShareUrl(res.data.pollId);
         setShareUrl(pollShareUrl);
-        setSuccess(
+        toast.success(
           "Sondagem criada com sucesso! A página de partilha foi aberta.",
         );
 
         if (pendingShareWindow) {
           pendingShareWindow.location.href = getSharePath(res.data.pollId);
         } else {
-          setSuccess(
+          toast.success(
             "Sondagem criada com sucesso! O browser bloqueou a nova janela; usa o botão de partilha.",
           );
         }
@@ -242,15 +297,13 @@ function Home() {
         pendingShareWindow.close();
       }
 
-      setError(err.response?.data?.error || "Erro ao guardar sondagem");
+      toast.error(err.response?.data?.error || "Erro ao guardar sondagem");
     }
 
     setLoading(false);
   };
 
   const startEditPoll = (poll) => {
-    setError("");
-    setSuccess("");
     setShareUrl("");
     setEditingPoll(poll);
 
@@ -278,18 +331,15 @@ function Home() {
 
     if (!confirmed) return;
 
-    setError("");
-    setSuccess("");
-
     try {
       await axios.delete(`${API}/polls/${poll.pollId}`, {
         headers: getAuthHeaders(),
       });
 
-      setSuccess("Sondagem eliminada com sucesso!");
+      toast.success("Sondagem eliminada com sucesso!");
       fetchPolls(user);
     } catch (err) {
-      setError(err.response?.data?.error || "Erro ao eliminar sondagem");
+      toast.error(err.response?.data?.error || "Erro ao eliminar sondagem");
     }
   };
 
@@ -300,9 +350,6 @@ function Home() {
 
     if (!confirmed) return;
 
-    setError("");
-    setSuccess("");
-
     try {
       await axios.patch(
         `${API}/polls/${poll.pollId}/close`,
@@ -312,19 +359,19 @@ function Home() {
         },
       );
 
-      setSuccess("Sondagem fechada com sucesso!");
+      toast.success("Sondagem fechada com sucesso!");
       fetchPolls(user);
     } catch (err) {
-      setError(err.response?.data?.error || "Erro ao fechar sondagem");
+      toast.error(err.response?.data?.error || "Erro ao fechar sondagem");
     }
   };
 
   const copyShareLink = async (pollId) => {
     try {
       await navigator.clipboard.writeText(getVoteUrl(pollId));
-      setSuccess("Link público de votação copiado!");
+      toast.success("Link público de votação copiado!");
     } catch {
-      setError("Não foi possível copiar o link.");
+      toast.error("Não foi possível copiar o link.");
     }
   };
 
@@ -491,9 +538,6 @@ function Home() {
           </div>
         </div>
 
-        {error && <p className="error">{error}</p>}
-        {success && <p className="success">{success}</p>}
-
         {shareUrl && (
           <div className="share-inline">
             <p>Última página de partilha criada:</p>
@@ -538,7 +582,10 @@ function Home() {
         />
 
         {loadingPolls && (
-          <p style={{ color: "#8491a3" }}>A carregar sondagens...</p>
+          <div style={{ textAlign: "center", padding: "2rem 0" }}>
+            <div className="share-spinner" />
+            <p style={{ color: "var(--soft-ink)", marginTop: "0.75rem" }}>A carregar sondagens...</p>
+          </div>
         )}
 
         {!loadingPolls && filteredPolls.length === 0 && (
@@ -624,6 +671,7 @@ function Home() {
           })}
         </div>
       </div>
+      <ToastStack toasts={toasts} removeToast={removeToast} />
     </div>
   );
 }

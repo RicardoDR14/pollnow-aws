@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { useToast } from "../hooks/useToast";
+import ToastStack from "../components/ToastStack";
 import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
 
@@ -14,17 +16,15 @@ function Login() {
   });
 
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const { toasts, removeToast, toast } = useToast();
 
   const handleSubmit = async () => {
-    setError("");
-
     if (!form.identifier.trim()) {
-      return setError("Email ou username obrigatório");
+      return toast.error("Email ou username obrigatório");
     }
 
     if (!form.password) {
-      return setError("Password obrigatória");
+      return toast.error("Password obrigatória");
     }
 
     setLoading(true);
@@ -38,7 +38,7 @@ function Login() {
       localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(res.data));
       navigate("/");
     } catch (err) {
-      setError(err.response?.data?.error || "Erro ao iniciar sessão");
+      toast.error(err.response?.data?.error || "Erro ao iniciar sessão");
     }
 
     setLoading(false);
@@ -63,8 +63,6 @@ function Login() {
         onChange={(e) => setForm({ ...form, password: e.target.value })}
       />
 
-      {error && <p className="error">{error}</p>}
-
       <button className="btn btn-primary" onClick={handleSubmit} disabled={loading}>
         {loading ? "A entrar..." : "Entrar"}
       </button>
@@ -75,6 +73,7 @@ function Login() {
           Criar conta
         </Link>
       </p>
+      <ToastStack toasts={toasts} removeToast={removeToast} />
     </div>
   );
 }
