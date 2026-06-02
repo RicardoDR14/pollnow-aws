@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { QRCodeCanvas } from "qrcode.react";
 import axios from "axios";
 
 const API = process.env.REACT_APP_API_URL;
@@ -31,7 +30,9 @@ function Home() {
   const [form, setForm] = useState(emptyForm);
 
   useEffect(() => {
-    const storedUser = JSON.parse(localStorage.getItem(USER_STORAGE_KEY) || "null");
+    const storedUser = JSON.parse(
+      localStorage.getItem(USER_STORAGE_KEY) || "null",
+    );
 
     if (!storedUser) {
       navigate("/login");
@@ -53,34 +54,11 @@ function Home() {
   });
 
   const getVoteUrl = (pollId) => `${window.location.origin}/vote/${pollId}`;
+  const getSharePath = (pollId) => `/share/${pollId}`;
+  const getShareUrl = (pollId) => `${window.location.origin}/share/${pollId}`;
 
-  const copyToClipboard = async (value) => {
-    try {
-      await navigator.clipboard.writeText(value);
-      setSuccess("Link copiado com sucesso!");
-    } catch {
-      setError("Não foi possível copiar o link");
-    }
-  };
-
-  const downloadQrCode = (pollId) => {
-    const canvas = document.getElementById(`qr-${pollId}`);
-
-    if (!canvas) {
-      setError("QR Code não encontrado");
-      return;
-    }
-
-    const pngUrl = canvas
-      .toDataURL("image/png")
-      .replace("image/png", "image/octet-stream");
-
-    const downloadLink = document.createElement("a");
-    downloadLink.href = pngUrl;
-    downloadLink.download = `pollnow-${pollId}-qr.png`;
-    document.body.appendChild(downloadLink);
-    downloadLink.click();
-    document.body.removeChild(downloadLink);
+  const openShareWindow = (pollId) => {
+    window.open(getSharePath(pollId), "_blank", "noopener,noreferrer");
   };
 
   const fetchPolls = async (activeUser = user) => {
@@ -137,7 +115,9 @@ function Home() {
   const validateForm = () => {
     if (!form.title.trim()) return "Título obrigatório";
 
-    const cleanOptions = form.options.map((option) => option.trim()).filter(Boolean);
+    const cleanOptions = form.options
+      .map((option) => option.trim())
+      .filter(Boolean);
 
     if (cleanOptions.length < 2) {
       return "A sondagem precisa de pelo menos 2 opções";
@@ -189,6 +169,17 @@ function Home() {
       return setError(validationError);
     }
 
+    let pendingShareWindow = null;
+
+    if (!editingPoll) {
+      pendingShareWindow = window.open("about:blank", "_blank");
+      if (pendingShareWindow) {
+        pendingShareWindow.document.write(
+          "<p style='font-family: Arial; padding: 24px;'>A preparar página de partilha...</p>",
+        );
+      }
+    }
+
     setLoading(true);
 
     try {
@@ -229,14 +220,28 @@ function Home() {
           },
         );
 
-        const url = getVoteUrl(res.data.pollId);
-        setShareUrl(url);
-        setExpandedQrPollId(res.data.pollId);
-        setSuccess("Sondagem criada com sucesso!");
+        const pollShareUrl = getShareUrl(res.data.pollId);
+        setShareUrl(pollShareUrl);
+        setSuccess(
+          "Sondagem criada com sucesso! A página de partilha foi aberta.",
+        );
+
+        if (pendingShareWindow) {
+          pendingShareWindow.location.href = getSharePath(res.data.pollId);
+        } else {
+          setSuccess(
+            "Sondagem criada com sucesso! O browser bloqueou a nova janela; usa o botão de partilha.",
+          );
+        }
+
         resetForm();
         fetchPolls(user);
       }
     } catch (err) {
+      if (pendingShareWindow) {
+        pendingShareWindow.close();
+      }
+
       setError(err.response?.data?.error || "Erro ao guardar sondagem");
     }
 
@@ -314,6 +319,15 @@ function Home() {
     }
   };
 
+  const copyShareLink = async (pollId) => {
+    try {
+      await navigator.clipboard.writeText(getVoteUrl(pollId));
+      setSuccess("Link público de votação copiado!");
+    } catch {
+      setError("Não foi possível copiar o link.");
+    }
+  };
+
   const getStatusBadge = (poll) => {
     const now = new Date();
     const closes = new Date(poll.closesAt);
@@ -339,6 +353,12 @@ function Home() {
     );
   });
 
+  const openPolls = polls.filter(
+    (poll) => poll.status === "open" && new Date(poll.closesAt) >= new Date(),
+  ).length;
+
+  const closedPolls = polls.length - openPolls;
+
   if (!user) {
     return (
       <div className="card">
@@ -349,28 +369,76 @@ function Home() {
 
   return (
     <div>
-      <div className="card">
-        <h2>{editingPoll ? "Editar sondagem" : "Criar nova sondagem"}</h2>
+      <section className="dashboard-hero">
+        <div>
+          <span className="eyebrow">Dashboard PollNow</span>
+          <h1>Cria, partilha e acompanha sondagens em tempo real.</h1>
+          <p>
+            Gere as tuas polls num espaço privado, partilha por QR Code e
+            acompanha os resultados sem complicações.
+          </p>
+        </div>
+
+        <div className="hero-stats">
+          <div>
+            <strong>{polls.length}</strong>
+            <span>Total</span>
+          </div>
+          <div>
+            <strong>{openPolls}</strong>
+            <span>Abertas</span>
+          </div>
+          <div>
+            <strong>{closedPolls}</strong>
+            <span>Fechadas</span>
+          </div>
+        </div>
+      </section>
+
+      <div className={`card form-card ${editingPoll ? "editing-card" : ""}`}>
+        <div className="card-heading-row">
+          <div>
+            <span className="section-kicker">
+              {editingPoll ? "Modo edição" : "Nova sondagem"}
+            </span>
+            <h2>{editingPoll ? "Editar sondagem" : "Criar nova sondagem"}</h2>
+          </div>
+
+          {editingPoll && <span className="edit-pill">A editar</span>}
+        </div>
 
         {editingPoll && (
-          <p style={{ color: "#666", marginBottom: "1rem" }}>
-            A editar: <strong>{editingPoll.title}</strong>
-          </p>
+          <div className="editing-notice">
+            <strong>Sondagem selecionada:</strong> {editingPoll.title}
+            <br />
+            <small>
+              Estás a alterar uma poll existente. Para voltar ao modo normal,
+              clica em “Cancelar edição”.
+            </small>
+          </div>
         )}
 
-        <label>Título</label>
-        <input
-          placeholder="Ex: Melhor dia para reunião?"
-          value={form.title}
-          onChange={(e) => setForm({ ...form, title: e.target.value })}
-        />
+        <div className="form-grid">
+          <div className="form-field">
+            <label>Título</label>
+            <input
+              placeholder="Ex: Melhor dia para reunião?"
+              value={form.title}
+              onChange={(e) => setForm({ ...form, title: e.target.value })}
+            />
+          </div>
 
-        <label>Descrição opcional</label>
-        <input
-          placeholder="Ex: Escolhe a melhor opção para o grupo"
-          value={form.description}
-          onChange={(e) => setForm({ ...form, description: e.target.value })}
-        />
+          <div className="form-field">
+            <label>Descrição opcional</label>
+            <input
+              placeholder="Ex: Escolhe a melhor opção para o grupo"
+              value={form.description}
+              onChange={(e) =>
+                setForm({ ...form, description: e.target.value })
+              }
+            />
+          </div>
+        </div>
 
         <label>Opções</label>
         {form.options.map((opt, i) => (
@@ -381,7 +449,10 @@ function Home() {
               onChange={(e) => handleOptionChange(i, e.target.value)}
             />
             {form.options.length > 2 && (
-              <button className="btn btn-danger" onClick={() => removeOption(i)}>
+              <button
+                className="btn btn-danger"
+                onClick={() => removeOption(i)}
+              >
                 ✕
               </button>
             )}
@@ -398,45 +469,44 @@ function Home() {
           </button>
         )}
 
-        <label>Data e hora de fecho</label>
-        <input
-          type="datetime-local"
-          value={form.closesAt}
-          onChange={(e) => setForm({ ...form, closesAt: e.target.value })}
-        />
+        <div className="form-grid">
+          <div className="form-field">
+            <label>Data e hora de fecho</label>
+            <input
+              type="datetime-local"
+              value={form.closesAt}
+              onChange={(e) => setForm({ ...form, closesAt: e.target.value })}
+            />
+          </div>
 
-        <label>Email para notificação</label>
-        <input
-          placeholder="Ex: autor@email.com"
-          value={form.authorPhone}
-          onChange={(e) => setForm({ ...form, authorPhone: e.target.value })}
-        />
+          <div className="form-field">
+            <label>Email para notificação</label>
+            <input
+              placeholder="Ex: autor@email.com"
+              value={form.authorPhone}
+              onChange={(e) =>
+                setForm({ ...form, authorPhone: e.target.value })
+              }
+            />
+          </div>
+        </div>
 
         {error && <p className="error">{error}</p>}
         {success && <p className="success">{success}</p>}
 
         {shareUrl && (
-          <div>
-            <p className="success">Partilha este link com os votantes:</p>
+          <div className="share-inline">
+            <p>Última página de partilha criada:</p>
             <div className="share-box">{shareUrl}</div>
-
-            <div style={{ margin: "1rem 0" }}>
-              <QRCodeCanvas value={shareUrl} size={160} />
-            </div>
-
-            <button
-              className="btn btn-secondary"
-              onClick={() => copyToClipboard(shareUrl)}
-            >
-              Copiar link
-            </button>
           </div>
         )}
 
-        <br />
-
-        <div style={{ display: "flex", gap: "0.8rem", flexWrap: "wrap" }}>
-          <button className="btn btn-primary" onClick={handleSubmit} disabled={loading}>
+        <div className="form-actions">
+          <button
+            className="btn btn-primary"
+            onClick={handleSubmit}
+            disabled={loading}
+          >
             {loading
               ? "A guardar..."
               : editingPoll
@@ -452,126 +522,107 @@ function Home() {
         </div>
       </div>
 
-      <div className="card">
-        <h2>Minhas sondagens</h2>
+      <div className="card polls-card">
+        <div className="card-heading-row">
+          <div>
+            <span className="section-kicker">Gestão</span>
+            <h2>Minhas sondagens</h2>
+          </div>
+        </div>
 
         <input
+          className="search-input"
           placeholder="Pesquisar por título, descrição ou estado..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
 
-        {loadingPolls && <p style={{ color: "#888" }}>A carregar sondagens...</p>}
-
-        {!loadingPolls && filteredPolls.length === 0 && (
-          <p style={{ color: "#888" }}>Nenhuma sondagem encontrada.</p>
+        {loadingPolls && (
+          <p style={{ color: "#8491a3" }}>A carregar sondagens...</p>
         )}
 
-        {filteredPolls.map((poll) => {
-          const isClosed =
-            poll.status === "closed" ||
-            poll.status === "notified" ||
-            new Date(poll.closesAt) < new Date();
+        {!loadingPolls && filteredPolls.length === 0 && (
+          <p style={{ color: "#8491a3" }}>Nenhuma sondagem encontrada.</p>
+        )}
 
-          const voteUrl = getVoteUrl(poll.pollId);
-          const isQrExpanded = expandedQrPollId === poll.pollId;
+        <div className="poll-grid">
+          {filteredPolls.map((poll) => {
+            const isClosed =
+              poll.status === "closed" ||
+              poll.status === "notified" ||
+              new Date(poll.closesAt) < new Date();
 
-          return (
-            <div className="poll-list-item" key={poll.pollId}>
-              <div style={{ flex: 1 }}>
-                <h3>{poll.title}</h3>
-
-                {poll.description && (
-                  <p style={{ color: "#666", marginBottom: "0.4rem" }}>
-                    {poll.description}
-                  </p>
-                )}
-
-                <small style={{ color: "#888" }}>
-                  Fecha: {new Date(poll.closesAt).toLocaleString("pt-PT")}
-                </small>
-
-                <br />
-                {getStatusBadge(poll)}
-
-                {isQrExpanded && (
-                  <div
-                    style={{
-                      marginTop: "1rem",
-                      padding: "1rem",
-                      background: "#f9fafb",
-                      border: "1px solid #e5e7eb",
-                      borderRadius: "10px",
-                    }}
-                  >
-                    <p style={{ fontWeight: 600, marginBottom: "0.7rem" }}>
-                      QR Code para votação
-                    </p>
-
-                    <QRCodeCanvas id={`qr-${poll.pollId}`} value={voteUrl} size={170} />
-
-                    <div className="share-box">{voteUrl}</div>
-
-                    <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap" }}>
-                      <button
-                        className="btn btn-secondary"
-                        onClick={() => copyToClipboard(voteUrl)}
-                      >
-                        Copiar link
-                      </button>
-
-                      <button
-                        className="btn btn-secondary"
-                        onClick={() => downloadQrCode(poll.pollId)}
-                      >
-                        Baixar QR
-                      </button>
-                    </div>
+            return (
+              <article className="poll-card" key={poll.pollId}>
+                <div className="poll-main">
+                  <div className="poll-topline">
+                    {getStatusBadge(poll)}
+                    <small>
+                      {new Date(poll.closesAt).toLocaleString("pt-PT")}
+                    </small>
                   </div>
-                )}
-              </div>
 
-              <div className="poll-actions" style={{ flexWrap: "wrap" }}>
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => navigate(`/vote/${poll.pollId}`)}
-                >
-                  Votar
-                </button>
+                  <h3>{poll.title}</h3>
 
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => navigate(`/results/${poll.pollId}`)}
-                >
-                  Resultados
-                </button>
+                  {poll.description && <p>{poll.description}</p>}
+                </div>
 
-                <button
-                  className="btn btn-secondary"
-                  onClick={() =>
-                    setExpandedQrPollId(isQrExpanded ? null : poll.pollId)
-                  }
-                >
-                  {isQrExpanded ? "Ocultar QR" : "QR Code"}
-                </button>
-
-                <button className="btn btn-secondary" onClick={() => startEditPoll(poll)}>
-                  Editar
-                </button>
-
-                {!isClosed && (
-                  <button className="btn btn-success" onClick={() => closePoll(poll)}>
-                    Fechar
+                <div className="poll-actions">
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => navigate(`/vote/${poll.pollId}`)}
+                  >
+                    Votar
                   </button>
-                )}
 
-                <button className="btn btn-danger" onClick={() => deletePoll(poll)}>
-                  Eliminar
-                </button>
-              </div>
-            </div>
-          );
-        })}
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => navigate(`/results/${poll.pollId}`)}
+                  >
+                    Resultados
+                  </button>
+
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => openShareWindow(poll.pollId)}
+                  >
+                    Partilhar
+                  </button>
+
+                  <button
+                    className="btn btn-ghost"
+                    onClick={() => copyShareLink(poll.pollId)}
+                  >
+                    Copiar link
+                  </button>
+
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => startEditPoll(poll)}
+                  >
+                    Editar
+                  </button>
+
+                  {!isClosed && (
+                    <button
+                      className="btn btn-success"
+                      onClick={() => closePoll(poll)}
+                    >
+                      Fechar
+                    </button>
+                  )}
+
+                  <button
+                    className="btn btn-danger"
+                    onClick={() => deletePoll(poll)}
+                  >
+                    Eliminar
+                  </button>
+                </div>
+              </article>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

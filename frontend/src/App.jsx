@@ -5,6 +5,7 @@ import Vote from "./pages/Vote";
 import Results from "./pages/Results";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
+import SharePoll from "./pages/SharePoll";
 import "./App.css";
 
 function App() {
@@ -16,6 +17,7 @@ function App() {
           <Route path="/" element={<Home />} />
           <Route path="/vote/:pollId" element={<Vote />} />
           <Route path="/results/:pollId" element={<Results />} />
+          <Route path="/share/:pollId" element={<SharePoll />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
         </Routes>

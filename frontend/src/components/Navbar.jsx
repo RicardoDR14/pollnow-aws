@@ -13,86 +13,32 @@ function Navbar() {
   };
 
   return (
-    <nav
-      style={{
-        background: "#4f46e5",
-        padding: "1rem 2rem",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        gap: "2rem",
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "center", gap: "2rem" }}>
-        <Link
-          to="/"
-          style={{
-            color: "white",
-            textDecoration: "none",
-            fontWeight: 700,
-            fontSize: "1.2rem",
-          }}
-        >
-          🗳️ PollNow
+    <nav className="top-nav">
+      <div className="nav-left">
+        <Link to="/" className="brand-link">
+          <span className="brand-icon">☑</span>
+          <span>PollNow</span>
         </Link>
 
-        <Link
-          to="/"
-          style={{
-            color: "rgba(255,255,255,0.85)",
-            textDecoration: "none",
-            fontSize: "0.95rem",
-          }}
-        >
+        <Link to="/" className="nav-link">
           Dashboard
         </Link>
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+      <div className="nav-right">
         {user ? (
           <>
-            <span style={{ color: "white", fontSize: "0.9rem" }}>
-              👤 {user.username}
-            </span>
-            <button
-              onClick={handleLogout}
-              style={{
-                background: "rgba(255,255,255,0.15)",
-                color: "white",
-                border: "1px solid rgba(255,255,255,0.35)",
-                borderRadius: "8px",
-                padding: "0.45rem 0.8rem",
-                cursor: "pointer",
-                fontWeight: 600,
-              }}
-            >
+            <span className="nav-user">👤 {user.username}</span>
+            <button onClick={handleLogout} className="nav-logout">
               Sair
             </button>
           </>
         ) : (
           <>
-            <Link
-              to="/login"
-              style={{
-                color: "white",
-                textDecoration: "none",
-                fontSize: "0.95rem",
-              }}
-            >
+            <Link to="/login" className="nav-link">
               Entrar
             </Link>
-            <Link
-              to="/register"
-              style={{
-                background: "white",
-                color: "#4f46e5",
-                textDecoration: "none",
-                borderRadius: "8px",
-                padding: "0.45rem 0.8rem",
-                fontWeight: 700,
-                fontSize: "0.95rem",
-              }}
-            >
+            <Link to="/register" className="nav-register">
               Criar conta
             </Link>
           </>
