@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { QRCodeCanvas } from "qrcode.react";
 import axios from "axios";
 
 const API = process.env.REACT_APP_API_URL;
@@ -14,6 +15,7 @@ function Home() {
   const [loading, setLoading] = useState(false);
   const [loadingPolls, setLoadingPolls] = useState(true);
   const [editingPoll, setEditingPoll] = useState(null);
+  const [expandedQrPollId, setExpandedQrPollId] = useState(null);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [shareUrl, setShareUrl] = useState("");
@@ -49,6 +51,37 @@ function Home() {
   const getAuthHeaders = (activeUser = user) => ({
     "x-user-id": activeUser?.userId,
   });
+
+  const getVoteUrl = (pollId) => `${window.location.origin}/vote/${pollId}`;
+
+  const copyToClipboard = async (value) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setSuccess("Link copiado com sucesso!");
+    } catch {
+      setError("Não foi possível copiar o link");
+    }
+  };
+
+  const downloadQrCode = (pollId) => {
+    const canvas = document.getElementById(`qr-${pollId}`);
+
+    if (!canvas) {
+      setError("QR Code não encontrado");
+      return;
+    }
+
+    const pngUrl = canvas
+      .toDataURL("image/png")
+      .replace("image/png", "image/octet-stream");
+
+    const downloadLink = document.createElement("a");
+    downloadLink.href = pngUrl;
+    downloadLink.download = `pollnow-${pollId}-qr.png`;
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    document.body.removeChild(downloadLink);
+  };
 
   const fetchPolls = async (activeUser = user) => {
     if (!activeUser?.userId) return;
@@ -196,8 +229,9 @@ function Home() {
           },
         );
 
-        const url = `${window.location.origin}/vote/${res.data.pollId}`;
+        const url = getVoteUrl(res.data.pollId);
         setShareUrl(url);
+        setExpandedQrPollId(res.data.pollId);
         setSuccess("Sondagem criada com sucesso!");
         resetForm();
         fetchPolls(user);
@@ -385,9 +419,14 @@ function Home() {
           <div>
             <p className="success">Partilha este link com os votantes:</p>
             <div className="share-box">{shareUrl}</div>
+
+            <div style={{ margin: "1rem 0" }}>
+              <QRCodeCanvas value={shareUrl} size={160} />
+            </div>
+
             <button
               className="btn btn-secondary"
-              onClick={() => navigator.clipboard.writeText(shareUrl)}
+              onClick={() => copyToClipboard(shareUrl)}
             >
               Copiar link
             </button>
@@ -434,9 +473,12 @@ function Home() {
             poll.status === "notified" ||
             new Date(poll.closesAt) < new Date();
 
+          const voteUrl = getVoteUrl(poll.pollId);
+          const isQrExpanded = expandedQrPollId === poll.pollId;
+
           return (
             <div className="poll-list-item" key={poll.pollId}>
-              <div>
+              <div style={{ flex: 1 }}>
                 <h3>{poll.title}</h3>
 
                 {poll.description && (
@@ -451,6 +493,42 @@ function Home() {
 
                 <br />
                 {getStatusBadge(poll)}
+
+                {isQrExpanded && (
+                  <div
+                    style={{
+                      marginTop: "1rem",
+                      padding: "1rem",
+                      background: "#f9fafb",
+                      border: "1px solid #e5e7eb",
+                      borderRadius: "10px",
+                    }}
+                  >
+                    <p style={{ fontWeight: 600, marginBottom: "0.7rem" }}>
+                      QR Code para votação
+                    </p>
+
+                    <QRCodeCanvas id={`qr-${poll.pollId}`} value={voteUrl} size={170} />
+
+                    <div className="share-box">{voteUrl}</div>
+
+                    <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap" }}>
+                      <button
+                        className="btn btn-secondary"
+                        onClick={() => copyToClipboard(voteUrl)}
+                      >
+                        Copiar link
+                      </button>
+
+                      <button
+                        className="btn btn-secondary"
+                        onClick={() => downloadQrCode(poll.pollId)}
+                      >
+                        Baixar QR
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="poll-actions" style={{ flexWrap: "wrap" }}>
@@ -466,6 +544,15 @@ function Home() {
                   onClick={() => navigate(`/results/${poll.pollId}`)}
                 >
                   Resultados
+                </button>
+
+                <button
+                  className="btn btn-secondary"
+                  onClick={() =>
+                    setExpandedQrPollId(isQrExpanded ? null : poll.pollId)
+                  }
+                >
+                  {isQrExpanded ? "Ocultar QR" : "QR Code"}
                 </button>
 
                 <button className="btn btn-secondary" onClick={() => startEditPoll(poll)}>
