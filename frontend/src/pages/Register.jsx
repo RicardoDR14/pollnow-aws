@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { useToast } from "../hooks/useToast";
+import ToastStack from "../components/ToastStack";
 import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
 
@@ -16,33 +18,31 @@ function Register() {
   });
 
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const { toasts, removeToast, toast } = useToast();
 
   const handleSubmit = async () => {
-    setError("");
-
     if (!form.username.trim()) {
-      return setError("Username obrigatório");
+      return toast.error("Username obrigatório");
     }
 
     if (!form.email.trim()) {
-      return setError("Email obrigatório");
+      return toast.error("Email obrigatório");
     }
 
     if (!form.email.includes("@")) {
-      return setError("Email inválido");
+      return toast.error("Email inválido");
     }
 
     if (!form.password) {
-      return setError("Password obrigatória");
+      return toast.error("Password obrigatória");
     }
 
     if (form.password.length < 6) {
-      return setError("A password deve ter pelo menos 6 caracteres");
+      return toast.error("A password deve ter pelo menos 6 caracteres");
     }
 
     if (form.password !== form.confirmPassword) {
-      return setError("As passwords não coincidem");
+      return toast.error("As passwords não coincidem");
     }
 
     setLoading(true);
@@ -57,7 +57,7 @@ function Register() {
       localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(res.data));
       navigate("/");
     } catch (err) {
-      setError(err.response?.data?.error || "Erro ao criar conta");
+      toast.error(err.response?.data?.error || "Erro ao criar conta");
     }
 
     setLoading(false);
@@ -98,8 +98,6 @@ function Register() {
         onChange={(e) => setForm({ ...form, confirmPassword: e.target.value })}
       />
 
-      {error && <p className="error">{error}</p>}
-
       <button className="btn btn-primary" onClick={handleSubmit} disabled={loading}>
         {loading ? "A criar..." : "Criar conta"}
       </button>
@@ -110,6 +108,7 @@ function Register() {
           Entrar
         </Link>
       </p>
+      <ToastStack toasts={toasts} removeToast={removeToast} />
     </div>
   );
 }

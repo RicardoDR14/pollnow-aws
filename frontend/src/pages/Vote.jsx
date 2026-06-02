@@ -1,4 +1,6 @@
 import { useState, useEffect } from "react";
+import { useToast } from "../hooks/useToast";
+import ToastStack from "../components/ToastStack";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
 
@@ -30,8 +32,7 @@ function Vote() {
   const [previousVote, setPreviousVote] = useState("");
   const [loading, setLoading] = useState(true);
   const [voting, setVoting] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
+  const { toasts, removeToast, toast } = useToast();
 
   useEffect(() => {
     const storedVotes = getStoredVotes();
@@ -51,7 +52,6 @@ function Vote() {
       const res = await axios.get(`${API}/polls/${pollId}`);
       setPoll(res.data);
     } catch {
-      setError("Sondagem não encontrada");
     }
 
     setLoading(false);
@@ -59,12 +59,10 @@ function Vote() {
 
   const handleVote = async () => {
     if (!selected) {
-      return setError("Seleciona uma opção");
+      return toast.error("Seleciona uma opção");
     }
 
     setVoting(true);
-    setError("");
-    setSuccess("");
 
     try {
       const voterId = getOrCreateVoterId();
@@ -89,10 +87,10 @@ function Vote() {
       );
 
       setPreviousVote(selected);
-      setSuccess("Voto guardado com sucesso!");
+      toast.success("Voto guardado com sucesso!");
       setTimeout(() => navigate(`/results/${pollId}`), 700);
     } catch (err) {
-      setError(err.response?.data?.error || "Erro ao registar voto");
+      toast.error(err.response?.data?.error || "Erro ao registar voto");
     }
 
     setVoting(false);
@@ -100,16 +98,17 @@ function Vote() {
 
   if (loading) {
     return (
-      <div className="card">
-        <p>A carregar...</p>
+      <div className="card" style={{ textAlign: "center", padding: "3rem 1.8rem" }}>
+        <div className="share-spinner" />
+        <p style={{ color: "var(--soft-ink)", marginTop: "1rem" }}>A carregar...</p>
       </div>
     );
   }
 
-  if (error && !poll) {
+  if (!loading && !poll) {
     return (
       <div className="card">
-        <p className="error">{error}</p>
+        <p className="error">Sondagem não encontrada.</p>
       </div>
     );
   }
@@ -185,9 +184,6 @@ function Vote() {
             </div>
           ))}
 
-          {error && <p className="error">{error}</p>}
-          {success && <p className="success">{success}</p>}
-
           <button
             className="btn btn-primary"
             onClick={handleVote}
@@ -210,6 +206,7 @@ function Vote() {
       >
         Ver resultados
       </button>
+      <ToastStack toasts={toasts} removeToast={removeToast} />
     </div>
   );
 }

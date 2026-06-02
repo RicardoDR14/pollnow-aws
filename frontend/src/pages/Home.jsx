@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { QRCodeCanvas } from "qrcode.react";
+import { useToast } from "../hooks/useToast";
+import ToastStack from "../components/ToastStack";
 import axios from "axios";
 
 const API = process.env.REACT_APP_API_URL;
@@ -15,10 +16,8 @@ function Home() {
   const [loading, setLoading] = useState(false);
   const [loadingPolls, setLoadingPolls] = useState(true);
   const [editingPoll, setEditingPoll] = useState(null);
-  const [expandedQrPollId, setExpandedQrPollId] = useState(null);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
   const [shareUrl, setShareUrl] = useState("");
+  const { toasts, removeToast, toast } = useToast();
 
   const emptyForm = {
     title: "",
@@ -31,7 +30,9 @@ function Home() {
   const [form, setForm] = useState(emptyForm);
 
   useEffect(() => {
-    const storedUser = JSON.parse(localStorage.getItem(USER_STORAGE_KEY) || "null");
+    const storedUser = JSON.parse(
+      localStorage.getItem(USER_STORAGE_KEY) || "null",
+    );
 
     if (!storedUser) {
       navigate("/login");
@@ -53,41 +54,17 @@ function Home() {
   });
 
   const getVoteUrl = (pollId) => `${window.location.origin}/vote/${pollId}`;
+  const getSharePath = (pollId) => `/share/${pollId}`;
+  const getShareUrl = (pollId) => `${window.location.origin}/share/${pollId}`;
 
-  const copyToClipboard = async (value) => {
-    try {
-      await navigator.clipboard.writeText(value);
-      setSuccess("Link copiado com sucesso!");
-    } catch {
-      setError("Não foi possível copiar o link");
-    }
-  };
-
-  const downloadQrCode = (pollId) => {
-    const canvas = document.getElementById(`qr-${pollId}`);
-
-    if (!canvas) {
-      setError("QR Code não encontrado");
-      return;
-    }
-
-    const pngUrl = canvas
-      .toDataURL("image/png")
-      .replace("image/png", "image/octet-stream");
-
-    const downloadLink = document.createElement("a");
-    downloadLink.href = pngUrl;
-    downloadLink.download = `pollnow-${pollId}-qr.png`;
-    document.body.appendChild(downloadLink);
-    downloadLink.click();
-    document.body.removeChild(downloadLink);
+  const openShareWindow = (pollId) => {
+    window.open(getSharePath(pollId), "_blank", "noopener,noreferrer");
   };
 
   const fetchPolls = async (activeUser = user) => {
     if (!activeUser?.userId) return;
 
     setLoadingPolls(true);
-    setError("");
 
     try {
       const res = await axios.get(`${API}/polls`, {
@@ -98,7 +75,7 @@ function Home() {
         res.data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
       );
     } catch (err) {
-      setError(err.response?.data?.error || "Erro ao carregar sondagens");
+      toast.error(err.response?.data?.error || "Erro ao carregar sondagens");
     }
 
     setLoadingPolls(false);
@@ -137,7 +114,9 @@ function Home() {
   const validateForm = () => {
     if (!form.title.trim()) return "Título obrigatório";
 
-    const cleanOptions = form.options.map((option) => option.trim()).filter(Boolean);
+    const cleanOptions = form.options
+      .map((option) => option.trim())
+      .filter(Boolean);
 
     if (cleanOptions.length < 2) {
       return "A sondagem precisa de pelo menos 2 opções";
@@ -175,8 +154,6 @@ function Home() {
   };
 
   const handleSubmit = async () => {
-    setError("");
-    setSuccess("");
     setShareUrl("");
 
     if (!user?.userId) {
@@ -186,7 +163,76 @@ function Home() {
 
     const validationError = validateForm();
     if (validationError) {
-      return setError(validationError);
+      return toast.error(validationError);
+    }
+
+    let pendingShareWindow = null;
+
+    if (!editingPoll) {
+      pendingShareWindow = window.open("about:blank", "_blank");
+      if (pendingShareWindow) {
+        pendingShareWindow.document.write(`<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PollNow</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&display=swap');
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
+      color: #172033;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background:
+        radial-gradient(circle at top left, rgba(188,235,203,0.75), transparent 32rem),
+        radial-gradient(circle at top right, rgba(135,214,141,0.35), transparent 28rem),
+        linear-gradient(180deg, #f7fff6, #eef7f1 48%, #f8fbfa);
+    }
+    .shell {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1.4rem;
+      text-align: center;
+      padding: 2rem;
+    }
+    .logo {
+      width: 64px;
+      height: 64px;
+      border-radius: 20px;
+      display: grid;
+      place-items: center;
+      background: linear-gradient(135deg, #87d68d, #bcebcb);
+      box-shadow: 0 10px 26px rgba(23,32,51,0.07);
+      font-size: 2rem;
+    }
+    h1 { font-size: 1.7rem; letter-spacing: -0.04em; }
+    p { color: #4a5568; font-size: 1rem; }
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid rgba(135,214,141,0.3);
+      border-top-color: #87d68d;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="logo">☑</div>
+    <h1>PollNow</h1>
+    <div class="spinner"></div>
+    <p>A preparar página de partilha…</p>
+  </div>
+</body>
+</html>`);
+        pendingShareWindow.document.close();
+      }
     }
 
     setLoading(true);
@@ -209,7 +255,7 @@ function Home() {
           },
         );
 
-        setSuccess("Sondagem editada com sucesso!");
+        toast.success("Sondagem editada com sucesso!");
         resetForm();
         fetchPolls(user);
       } else {
@@ -229,23 +275,35 @@ function Home() {
           },
         );
 
-        const url = getVoteUrl(res.data.pollId);
-        setShareUrl(url);
-        setExpandedQrPollId(res.data.pollId);
-        setSuccess("Sondagem criada com sucesso!");
+        const pollShareUrl = getShareUrl(res.data.pollId);
+        setShareUrl(pollShareUrl);
+        toast.success(
+          "Sondagem criada com sucesso! A página de partilha foi aberta.",
+        );
+
+        if (pendingShareWindow) {
+          pendingShareWindow.location.href = getSharePath(res.data.pollId);
+        } else {
+          toast.success(
+            "Sondagem criada com sucesso! O browser bloqueou a nova janela; usa o botão de partilha.",
+          );
+        }
+
         resetForm();
         fetchPolls(user);
       }
     } catch (err) {
-      setError(err.response?.data?.error || "Erro ao guardar sondagem");
+      if (pendingShareWindow) {
+        pendingShareWindow.close();
+      }
+
+      toast.error(err.response?.data?.error || "Erro ao guardar sondagem");
     }
 
     setLoading(false);
   };
 
   const startEditPoll = (poll) => {
-    setError("");
-    setSuccess("");
     setShareUrl("");
     setEditingPoll(poll);
 
@@ -273,18 +331,15 @@ function Home() {
 
     if (!confirmed) return;
 
-    setError("");
-    setSuccess("");
-
     try {
       await axios.delete(`${API}/polls/${poll.pollId}`, {
         headers: getAuthHeaders(),
       });
 
-      setSuccess("Sondagem eliminada com sucesso!");
+      toast.success("Sondagem eliminada com sucesso!");
       fetchPolls(user);
     } catch (err) {
-      setError(err.response?.data?.error || "Erro ao eliminar sondagem");
+      toast.error(err.response?.data?.error || "Erro ao eliminar sondagem");
     }
   };
 
@@ -295,9 +350,6 @@ function Home() {
 
     if (!confirmed) return;
 
-    setError("");
-    setSuccess("");
-
     try {
       await axios.patch(
         `${API}/polls/${poll.pollId}/close`,
@@ -307,10 +359,19 @@ function Home() {
         },
       );
 
-      setSuccess("Sondagem fechada com sucesso!");
+      toast.success("Sondagem fechada com sucesso!");
       fetchPolls(user);
     } catch (err) {
-      setError(err.response?.data?.error || "Erro ao fechar sondagem");
+      toast.error(err.response?.data?.error || "Erro ao fechar sondagem");
+    }
+  };
+
+  const copyShareLink = async (pollId) => {
+    try {
+      await navigator.clipboard.writeText(getVoteUrl(pollId));
+      toast.success("Link público de votação copiado!");
+    } catch {
+      toast.error("Não foi possível copiar o link.");
     }
   };
 
@@ -339,6 +400,12 @@ function Home() {
     );
   });
 
+  const openPolls = polls.filter(
+    (poll) => poll.status === "open" && new Date(poll.closesAt) >= new Date(),
+  ).length;
+
+  const closedPolls = polls.length - openPolls;
+
   if (!user) {
     return (
       <div className="card">
@@ -349,28 +416,76 @@ function Home() {
 
   return (
     <div>
-      <div className="card">
-        <h2>{editingPoll ? "Editar sondagem" : "Criar nova sondagem"}</h2>
+      <section className="dashboard-hero">
+        <div>
+          <span className="eyebrow">Dashboard PollNow</span>
+          <h1>Cria, partilha e acompanha sondagens em tempo real.</h1>
+          <p>
+            Gere as tuas polls num espaço privado, partilha por QR Code e
+            acompanha os resultados sem complicações.
+          </p>
+        </div>
+
+        <div className="hero-stats">
+          <div>
+            <strong>{polls.length}</strong>
+            <span>Total</span>
+          </div>
+          <div>
+            <strong>{openPolls}</strong>
+            <span>Abertas</span>
+          </div>
+          <div>
+            <strong>{closedPolls}</strong>
+            <span>Fechadas</span>
+          </div>
+        </div>
+      </section>
+
+      <div className={`card form-card ${editingPoll ? "editing-card" : ""}`}>
+        <div className="card-heading-row">
+          <div>
+            <span className="section-kicker">
+              {editingPoll ? "Modo edição" : "Nova sondagem"}
+            </span>
+            <h2>{editingPoll ? "Editar sondagem" : "Criar nova sondagem"}</h2>
+          </div>
+
+          {editingPoll && <span className="edit-pill">A editar</span>}
+        </div>
 
         {editingPoll && (
-          <p style={{ color: "#666", marginBottom: "1rem" }}>
-            A editar: <strong>{editingPoll.title}</strong>
-          </p>
+          <div className="editing-notice">
+            <strong>Sondagem selecionada:</strong> {editingPoll.title}
+            <br />
+            <small>
+              Estás a alterar uma poll existente. Para voltar ao modo normal,
+              clica em “Cancelar edição”.
+            </small>
+          </div>
         )}
 
-        <label>Título</label>
-        <input
-          placeholder="Ex: Melhor dia para reunião?"
-          value={form.title}
-          onChange={(e) => setForm({ ...form, title: e.target.value })}
-        />
+        <div className="form-grid">
+          <div className="form-field">
+            <label>Título</label>
+            <input
+              placeholder="Ex: Melhor dia para reunião?"
+              value={form.title}
+              onChange={(e) => setForm({ ...form, title: e.target.value })}
+            />
+          </div>
 
-        <label>Descrição opcional</label>
-        <input
-          placeholder="Ex: Escolhe a melhor opção para o grupo"
-          value={form.description}
-          onChange={(e) => setForm({ ...form, description: e.target.value })}
-        />
+          <div className="form-field">
+            <label>Descrição opcional</label>
+            <input
+              placeholder="Ex: Escolhe a melhor opção para o grupo"
+              value={form.description}
+              onChange={(e) =>
+                setForm({ ...form, description: e.target.value })
+              }
+            />
+          </div>
+        </div>
 
         <label>Opções</label>
         {form.options.map((opt, i) => (
@@ -381,7 +496,10 @@ function Home() {
               onChange={(e) => handleOptionChange(i, e.target.value)}
             />
             {form.options.length > 2 && (
-              <button className="btn btn-danger" onClick={() => removeOption(i)}>
+              <button
+                className="btn btn-danger"
+                onClick={() => removeOption(i)}
+              >
                 ✕
               </button>
             )}
@@ -398,45 +516,41 @@ function Home() {
           </button>
         )}
 
-        <label>Data e hora de fecho</label>
-        <input
-          type="datetime-local"
-          value={form.closesAt}
-          onChange={(e) => setForm({ ...form, closesAt: e.target.value })}
-        />
+        <div className="form-grid">
+          <div className="form-field">
+            <label>Data e hora de fecho</label>
+            <input
+              type="datetime-local"
+              value={form.closesAt}
+              onChange={(e) => setForm({ ...form, closesAt: e.target.value })}
+            />
+          </div>
 
-        <label>Email para notificação</label>
-        <input
-          placeholder="Ex: autor@email.com"
-          value={form.authorPhone}
-          onChange={(e) => setForm({ ...form, authorPhone: e.target.value })}
-        />
-
-        {error && <p className="error">{error}</p>}
-        {success && <p className="success">{success}</p>}
+          <div className="form-field">
+            <label>Email para notificação</label>
+            <input
+              placeholder="Ex: autor@email.com"
+              value={form.authorPhone}
+              onChange={(e) =>
+                setForm({ ...form, authorPhone: e.target.value })
+              }
+            />
+          </div>
+        </div>
 
         {shareUrl && (
-          <div>
-            <p className="success">Partilha este link com os votantes:</p>
+          <div className="share-inline">
+            <p>Última página de partilha criada:</p>
             <div className="share-box">{shareUrl}</div>
-
-            <div style={{ margin: "1rem 0" }}>
-              <QRCodeCanvas value={shareUrl} size={160} />
-            </div>
-
-            <button
-              className="btn btn-secondary"
-              onClick={() => copyToClipboard(shareUrl)}
-            >
-              Copiar link
-            </button>
           </div>
         )}
 
-        <br />
-
-        <div style={{ display: "flex", gap: "0.8rem", flexWrap: "wrap" }}>
-          <button className="btn btn-primary" onClick={handleSubmit} disabled={loading}>
+        <div className="form-actions">
+          <button
+            className="btn btn-primary"
+            onClick={handleSubmit}
+            disabled={loading}
+          >
             {loading
               ? "A guardar..."
               : editingPoll
@@ -452,127 +566,112 @@ function Home() {
         </div>
       </div>
 
-      <div className="card">
-        <h2>Minhas sondagens</h2>
+      <div className="card polls-card">
+        <div className="card-heading-row">
+          <div>
+            <span className="section-kicker">Gestão</span>
+            <h2>Minhas sondagens</h2>
+          </div>
+        </div>
 
         <input
+          className="search-input"
           placeholder="Pesquisar por título, descrição ou estado..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
 
-        {loadingPolls && <p style={{ color: "#888" }}>A carregar sondagens...</p>}
-
-        {!loadingPolls && filteredPolls.length === 0 && (
-          <p style={{ color: "#888" }}>Nenhuma sondagem encontrada.</p>
+        {loadingPolls && (
+          <div style={{ textAlign: "center", padding: "2rem 0" }}>
+            <div className="share-spinner" />
+            <p style={{ color: "var(--soft-ink)", marginTop: "0.75rem" }}>A carregar sondagens...</p>
+          </div>
         )}
 
-        {filteredPolls.map((poll) => {
-          const isClosed =
-            poll.status === "closed" ||
-            poll.status === "notified" ||
-            new Date(poll.closesAt) < new Date();
+        {!loadingPolls && filteredPolls.length === 0 && (
+          <p style={{ color: "#8491a3" }}>Nenhuma sondagem encontrada.</p>
+        )}
 
-          const voteUrl = getVoteUrl(poll.pollId);
-          const isQrExpanded = expandedQrPollId === poll.pollId;
+        <div className="poll-grid">
+          {filteredPolls.map((poll) => {
+            const isClosed =
+              poll.status === "closed" ||
+              poll.status === "notified" ||
+              new Date(poll.closesAt) < new Date();
 
-          return (
-            <div className="poll-list-item" key={poll.pollId}>
-              <div style={{ flex: 1 }}>
-                <h3>{poll.title}</h3>
-
-                {poll.description && (
-                  <p style={{ color: "#666", marginBottom: "0.4rem" }}>
-                    {poll.description}
-                  </p>
-                )}
-
-                <small style={{ color: "#888" }}>
-                  Fecha: {new Date(poll.closesAt).toLocaleString("pt-PT")}
-                </small>
-
-                <br />
-                {getStatusBadge(poll)}
-
-                {isQrExpanded && (
-                  <div
-                    style={{
-                      marginTop: "1rem",
-                      padding: "1rem",
-                      background: "#f9fafb",
-                      border: "1px solid #e5e7eb",
-                      borderRadius: "10px",
-                    }}
-                  >
-                    <p style={{ fontWeight: 600, marginBottom: "0.7rem" }}>
-                      QR Code para votação
-                    </p>
-
-                    <QRCodeCanvas id={`qr-${poll.pollId}`} value={voteUrl} size={170} />
-
-                    <div className="share-box">{voteUrl}</div>
-
-                    <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap" }}>
-                      <button
-                        className="btn btn-secondary"
-                        onClick={() => copyToClipboard(voteUrl)}
-                      >
-                        Copiar link
-                      </button>
-
-                      <button
-                        className="btn btn-secondary"
-                        onClick={() => downloadQrCode(poll.pollId)}
-                      >
-                        Baixar QR
-                      </button>
-                    </div>
+            return (
+              <article className="poll-card" key={poll.pollId}>
+                <div className="poll-main">
+                  <div className="poll-topline">
+                    {getStatusBadge(poll)}
+                    <small>
+                      {new Date(poll.closesAt).toLocaleString("pt-PT")}
+                    </small>
                   </div>
-                )}
-              </div>
 
-              <div className="poll-actions" style={{ flexWrap: "wrap" }}>
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => navigate(`/vote/${poll.pollId}`)}
-                >
-                  Votar
-                </button>
+                  <h3>{poll.title}</h3>
 
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => navigate(`/results/${poll.pollId}`)}
-                >
-                  Resultados
-                </button>
+                  {poll.description && <p>{poll.description}</p>}
+                </div>
 
-                <button
-                  className="btn btn-secondary"
-                  onClick={() =>
-                    setExpandedQrPollId(isQrExpanded ? null : poll.pollId)
-                  }
-                >
-                  {isQrExpanded ? "Ocultar QR" : "QR Code"}
-                </button>
-
-                <button className="btn btn-secondary" onClick={() => startEditPoll(poll)}>
-                  Editar
-                </button>
-
-                {!isClosed && (
-                  <button className="btn btn-success" onClick={() => closePoll(poll)}>
-                    Fechar
+                <div className="poll-actions">
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => navigate(`/vote/${poll.pollId}`)}
+                  >
+                    Votar
                   </button>
-                )}
 
-                <button className="btn btn-danger" onClick={() => deletePoll(poll)}>
-                  Eliminar
-                </button>
-              </div>
-            </div>
-          );
-        })}
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => navigate(`/results/${poll.pollId}`)}
+                  >
+                    Resultados
+                  </button>
+
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => openShareWindow(poll.pollId)}
+                  >
+                    Partilhar
+                  </button>
+
+                  <button
+                    className="btn btn-ghost"
+                    onClick={() => copyShareLink(poll.pollId)}
+                  >
+                    Copiar link
+                  </button>
+
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => startEditPoll(poll)}
+                  >
+                    Editar
+                  </button>
+
+                  {!isClosed && (
+                    <button
+                      className="btn btn-success"
+                      onClick={() => closePoll(poll)}
+                    >
+                      Fechar
+                    </button>
+                  )}
+
+                  <button
+                    className="btn btn-danger"
+                    onClick={() => deletePoll(poll)}
+                  >
+                    Eliminar
+                  </button>
+                </div>
+              </article>
+            );
+          })}
+        </div>
       </div>
+      <ToastStack toasts={toasts} removeToast={removeToast} />
     </div>
   );
 }
