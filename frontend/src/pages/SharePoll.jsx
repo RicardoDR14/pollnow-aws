@@ -66,14 +66,19 @@ function SharePoll() {
     return (
       <div className="share-page">
         <div className="share-shell" style={{ textAlign: "center" }}>
-          <div className="share-brand" style={{ justifyContent: "center", marginBottom: "1.4rem" }}>
+          <div
+            className="share-brand"
+            style={{ justifyContent: "center", marginBottom: "1.4rem" }}
+          >
             <span className="share-logo">☑</span>
             <div>
               <h1 style={{ margin: 0 }}>PollNow</h1>
             </div>
           </div>
           <div className="share-spinner" />
-          <p style={{ color: "var(--soft-ink)", marginTop: "1rem" }}>A carregar página de partilha…</p>
+          <p style={{ color: "var(--soft-ink)", marginTop: "1rem" }}>
+            A carregar página de partilha…
+          </p>
         </div>
       </div>
     );
@@ -109,6 +114,14 @@ function SharePoll() {
 
         <div className="share-card">
           <div className="share-info">
+            {poll.imageUrl && (
+              <img
+                className="share-poll-image"
+                src={poll.imageUrl}
+                alt={`Imagem da sondagem ${poll.title}`}
+              />
+            )}
+
             <span className={isClosed ? "status-pill closed" : "status-pill open"}>
               {isClosed ? "Fechada" : "Aberta para votação"}
             </span>
@@ -134,6 +147,8 @@ function SharePoll() {
 
             {copied && <p className="success">Link copiado!</p>}
 
+            {error && <p className="error">{error}</p>}
+
             <div className="share-actions">
               <button className="btn btn-primary" onClick={copyLink}>
                 Copiar link
@@ -147,7 +162,10 @@ function SharePoll() {
         </div>
 
         <div className="share-footer-actions">
-          <button className="btn btn-primary" onClick={() => navigate(`/vote/${pollId}`)}>
+          <button
+            className="btn btn-primary"
+            onClick={() => navigate(`/vote/${pollId}`)}
+          >
             Abrir votação
           </button>
 

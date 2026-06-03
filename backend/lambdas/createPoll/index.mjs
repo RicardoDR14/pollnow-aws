@@ -1,10 +1,19 @@
 import { DynamoDBClient, PutItemCommand } from "@aws-sdk/client-dynamodb";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { SNSClient, PublishCommand } from "@aws-sdk/client-sns";
+import crypto from "crypto";
 
 const dynamo = new DynamoDBClient({});
 const s3 = new S3Client({});
 const sns = new SNSClient({ region: process.env.SNS_REGION || "us-east-1" });
+
+const MAX_IMAGE_SIZE_BYTES = 1.5 * 1024 * 1024;
+
+const ALLOWED_IMAGE_TYPES = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+};
 
 function corsResponse(statusCode, body) {
   return {
@@ -16,6 +25,10 @@ function corsResponse(statusCode, body) {
     },
     body: JSON.stringify(body),
   };
+}
+
+function isValidEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
 function getVoteUrl(pollId) {
@@ -36,6 +49,46 @@ async function publishNotification({ subject, message }) {
       Message: message,
     }),
   );
+}
+
+function parseImagePayload(body) {
+  if (!body.image) {
+    return null;
+  }
+
+  let base64Image = body.image;
+  let contentType = body.imageContentType || "image/jpeg";
+
+  if (typeof base64Image !== "string") {
+    throw new Error("Imagem inválida");
+  }
+
+  if (base64Image.startsWith("data:")) {
+    const match = base64Image.match(/^data:(.+);base64,(.+)$/);
+
+    if (!match) {
+      throw new Error("Formato da imagem inválido");
+    }
+
+    contentType = match[1];
+    base64Image = match[2];
+  }
+
+  if (!ALLOWED_IMAGE_TYPES[contentType]) {
+    throw new Error("Formato de imagem não suportado. Usa JPG, PNG ou WEBP");
+  }
+
+  const buffer = Buffer.from(base64Image, "base64");
+
+  if (buffer.length > MAX_IMAGE_SIZE_BYTES) {
+    throw new Error("A imagem deve ter no máximo 1.5MB");
+  }
+
+  return {
+    buffer,
+    contentType,
+    extension: ALLOWED_IMAGE_TYPES[contentType],
+  };
 }
 
 export const handler = async (event) => {
@@ -75,7 +128,24 @@ export const handler = async (event) => {
       });
     }
 
+    const notificationEmail = (body.authorPhone || body.ownerEmail || "")
+      .trim()
+      .toLowerCase();
+
+    if (!notificationEmail) {
+      return corsResponse(400, {
+        error: "Email para notificação obrigatório",
+      });
+    }
+
+    if (!isValidEmail(notificationEmail)) {
+      return corsResponse(400, {
+        error: "Email para notificação inválido",
+      });
+    }
+
     const closesAt = new Date(body.closesAt);
+
     if (Number.isNaN(closesAt.getTime()) || closesAt <= new Date()) {
       return corsResponse(400, {
         error: "A data de fecho tem de ser futura",
@@ -93,6 +163,7 @@ export const handler = async (event) => {
     }
 
     const lowerOptions = cleanOptions.map((option) => option.toLowerCase());
+
     if (new Set(lowerOptions).size !== lowerOptions.length) {
       return corsResponse(400, {
         error: "As opções não podem ser repetidas",
@@ -105,25 +176,29 @@ export const handler = async (event) => {
     const title = body.title.trim();
     const description = body.description?.trim() || "";
     const ownerUsername = body.ownerUsername || "";
-    const ownerEmail = body.ownerEmail || body.authorPhone || "";
+    const ownerEmail = body.ownerEmail || notificationEmail;
     const voteUrl = getVoteUrl(pollId);
 
     let imageUrl = "";
+    let imageKey = "";
+    let imageContentType = "";
 
-    if (body.image) {
-      const buffer = Buffer.from(body.image, "base64");
-      const key = `banners/${pollId}.jpg`;
+    const imagePayload = parseImagePayload(body);
+
+    if (imagePayload) {
+      imageKey = `banners/${pollId}.${imagePayload.extension}`;
+      imageContentType = imagePayload.contentType;
 
       await s3.send(
         new PutObjectCommand({
           Bucket: process.env.S3_BUCKET,
-          Key: key,
-          Body: buffer,
-          ContentType: "image/jpeg",
+          Key: imageKey,
+          Body: imagePayload.buffer,
+          ContentType: imagePayload.contentType,
         }),
       );
 
-      imageUrl = `https://${process.env.S3_BUCKET}.s3.amazonaws.com/${key}`;
+      imageUrl = `https://${process.env.S3_BUCKET}.s3.amazonaws.com/${imageKey}`;
     }
 
     await dynamo.send(
@@ -138,8 +213,10 @@ export const handler = async (event) => {
           description: { S: description },
           options: { L: cleanOptions.map((option) => ({ S: option })) },
           closesAt: { S: closesAt.toISOString() },
-          authorPhone: { S: body.authorPhone || ownerEmail },
+          authorPhone: { S: notificationEmail },
           imageUrl: { S: imageUrl },
+          imageKey: { S: imageKey },
+          imageContentType: { S: imageContentType },
           status: { S: "open" },
           createdAt: { S: createdAt },
         },
@@ -147,14 +224,16 @@ export const handler = async (event) => {
     );
 
     await publishNotification({
-      subject: `PollNow — Nova sondagem criada`,
+      subject: "PollNow — Nova sondagem criada",
       message:
         `Uma nova sondagem foi criada no PollNow.\n\n` +
         `Título: ${title}\n` +
         `Criada por: ${ownerUsername || "N/A"}\n` +
         `Email do autor: ${ownerEmail || "N/A"}\n` +
-        `Fecha em: ${closesAt.toLocaleString("pt-PT")}\n` +
-        `Opções: ${cleanOptions.join(", ")}\n\n` +
+        `Email para notificação: ${notificationEmail}\n` +
+        `Fecha em: ${closesAt.toISOString()}\n` +
+        `Opções: ${cleanOptions.join(", ")}\n` +
+        `Imagem: ${imageUrl || "Sem imagem"}\n\n` +
         `Link público para votar:\n${voteUrl}\n\n` +
         `ID da sondagem: ${pollId}`,
     });
@@ -162,12 +241,13 @@ export const handler = async (event) => {
     return corsResponse(201, {
       pollId,
       shareUrl: `/vote/${pollId}`,
+      imageUrl,
     });
   } catch (err) {
     console.error(err);
 
     return corsResponse(500, {
-      error: "Erro ao criar sondagem",
+      error: err.message || "Erro ao criar sondagem",
     });
   }
 };

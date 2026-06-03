@@ -7,6 +7,9 @@ import axios from "axios";
 const API = process.env.REACT_APP_API_URL;
 const USER_STORAGE_KEY = "pollnow_user";
 
+const MAX_IMAGE_SIZE_BYTES = 1.5 * 1024 * 1024;
+const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
+
 function Home() {
   const navigate = useNavigate();
 
@@ -18,6 +21,13 @@ function Home() {
   const [editingPoll, setEditingPoll] = useState(null);
   const [shareUrl, setShareUrl] = useState("");
   const { toasts, removeToast, toast } = useToast();
+
+  const [pollImage, setPollImage] = useState({
+    file: null,
+    previewUrl: "",
+    base64: "",
+    contentType: "",
+  });
 
   const emptyForm = {
     title: "",
@@ -48,6 +58,14 @@ function Home() {
     fetchPolls(storedUser);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    return () => {
+      if (pollImage.previewUrl) {
+        URL.revokeObjectURL(pollImage.previewUrl);
+      }
+    };
+  }, [pollImage.previewUrl]);
 
   const getAuthHeaders = (activeUser = user) => ({
     "x-user-id": activeUser?.userId,
@@ -102,6 +120,75 @@ function Home() {
     }
   };
 
+  const readFileAsBase64 = (file) =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+
+      reader.onload = () => {
+        const result = reader.result;
+
+        if (typeof result !== "string") {
+          reject(new Error("Imagem inválida"));
+          return;
+        }
+
+        const base64 = result.split(",")[1];
+        resolve(base64);
+      };
+
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+
+  const handleImageChange = async (event) => {
+    const file = event.target.files?.[0];
+
+    if (!file) return;
+
+    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+      toast.error("Formato inválido. Usa JPG, PNG ou WEBP.");
+      event.target.value = "";
+      return;
+    }
+
+    if (file.size > MAX_IMAGE_SIZE_BYTES) {
+      toast.error("A imagem deve ter no máximo 1.5MB.");
+      event.target.value = "";
+      return;
+    }
+
+    try {
+      const base64 = await readFileAsBase64(file);
+
+      if (pollImage.previewUrl) {
+        URL.revokeObjectURL(pollImage.previewUrl);
+      }
+
+      setPollImage({
+        file,
+        previewUrl: URL.createObjectURL(file),
+        base64,
+        contentType: file.type,
+      });
+    } catch {
+      toast.error("Não foi possível carregar a imagem.");
+      event.target.value = "";
+    }
+  };
+
+  const removeImage = () => {
+    if (pollImage.previewUrl) {
+      URL.revokeObjectURL(pollImage.previewUrl);
+    }
+
+    setPollImage({
+      file: null,
+      previewUrl: "",
+      base64: "",
+      contentType: "",
+    });
+  };
+
   const resetForm = () => {
     setEditingPoll(null);
     setForm({
@@ -109,6 +196,7 @@ function Home() {
       authorPhone: user?.email || "",
     });
     setShareUrl("");
+    removeImage();
   };
 
   const validateForm = () => {
@@ -153,25 +241,11 @@ function Home() {
     return "";
   };
 
-  const handleSubmit = async () => {
-    setShareUrl("");
+  const openPendingShareWindow = () => {
+    const pendingShareWindow = window.open("about:blank", "_blank");
 
-    if (!user?.userId) {
-      navigate("/login");
-      return;
-    }
-
-    const validationError = validateForm();
-    if (validationError) {
-      return toast.error(validationError);
-    }
-
-    let pendingShareWindow = null;
-
-    if (!editingPoll) {
-      pendingShareWindow = window.open("about:blank", "_blank");
-      if (pendingShareWindow) {
-        pendingShareWindow.document.write(`<!DOCTYPE html>
+    if (pendingShareWindow) {
+      pendingShareWindow.document.write(`<!DOCTYPE html>
 <html lang="pt">
 <head>
   <meta charset="UTF-8" />
@@ -231,8 +305,29 @@ function Home() {
   </div>
 </body>
 </html>`);
-        pendingShareWindow.document.close();
-      }
+      pendingShareWindow.document.close();
+    }
+
+    return pendingShareWindow;
+  };
+
+  const handleSubmit = async () => {
+    setShareUrl("");
+
+    if (!user?.userId) {
+      navigate("/login");
+      return;
+    }
+
+    const validationError = validateForm();
+    if (validationError) {
+      return toast.error(validationError);
+    }
+
+    let pendingShareWindow = null;
+
+    if (!editingPoll) {
+      pendingShareWindow = openPendingShareWindow();
     }
 
     setLoading(true);
@@ -259,33 +354,39 @@ function Home() {
         resetForm();
         fetchPolls(user);
       } else {
-        const res = await axios.post(
-          `${API}/polls`,
-          {
-            title: form.title,
-            description: form.description,
-            options: form.options.filter((option) => option.trim()),
-            closesAt: new Date(form.closesAt).toISOString(),
-            authorPhone: form.authorPhone,
-            ownerEmail: user.email,
-            ownerUsername: user.username,
-          },
-          {
-            headers: getAuthHeaders(),
-          },
-        );
+        const payload = {
+          title: form.title,
+          description: form.description,
+          options: form.options.filter((option) => option.trim()),
+          closesAt: new Date(form.closesAt).toISOString(),
+          authorPhone: form.authorPhone,
+          ownerEmail: user.email,
+          ownerUsername: user.username,
+        };
+
+        if (pollImage.base64) {
+          payload.image = pollImage.base64;
+          payload.imageContentType = pollImage.contentType;
+        }
+
+        const res = await axios.post(`${API}/polls`, payload, {
+          headers: getAuthHeaders(),
+        });
 
         const pollShareUrl = getShareUrl(res.data.pollId);
         setShareUrl(pollShareUrl);
+
         toast.success(
-          "Sondagem criada com sucesso! A página de partilha foi aberta.",
+          pollImage.base64
+            ? "Sondagem criada com imagem! A página de partilha foi aberta."
+            : "Sondagem criada com sucesso! A página de partilha foi aberta.",
         );
 
         if (pendingShareWindow) {
           pendingShareWindow.location.href = getSharePath(res.data.pollId);
         } else {
           toast.success(
-            "Sondagem criada com sucesso! O browser bloqueou a nova janela; usa o botão de partilha.",
+            "O browser bloqueou a nova janela; usa o botão de partilha.",
           );
         }
 
@@ -306,6 +407,7 @@ function Home() {
   const startEditPoll = (poll) => {
     setShareUrl("");
     setEditingPoll(poll);
+    removeImage();
 
     const localDate = new Date(poll.closesAt);
     const timezoneOffset = localDate.getTimezoneOffset() * 60000;
@@ -487,6 +589,53 @@ function Home() {
           </div>
         </div>
 
+        <div className="image-upload-box">
+          <div>
+            <label>Imagem opcional da sondagem</label>
+            <p>
+              Usa uma imagem para identificar melhor a poll, como uma foto,
+              logótipo, cartaz ou imagem da organização.
+            </p>
+          </div>
+
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            onChange={handleImageChange}
+            disabled={Boolean(editingPoll)}
+          />
+
+          {editingPoll && (
+            <small className="muted-text">
+              A alteração de imagem está disponível apenas na criação da poll
+              nesta fase.
+            </small>
+          )}
+
+          {pollImage.previewUrl && (
+            <div className="image-preview-card">
+              <img src={pollImage.previewUrl} alt="Preview da poll" />
+
+              <div>
+                <strong>{pollImage.file?.name}</strong>
+                <small>
+                  {pollImage.file
+                    ? `${Math.round(pollImage.file.size / 1024)} KB`
+                    : ""}
+                </small>
+
+                <button
+                  className="btn btn-ghost"
+                  type="button"
+                  onClick={removeImage}
+                >
+                  Remover imagem
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
         <label>Opções</label>
         {form.options.map((opt, i) => (
           <div className="option-row" key={i}>
@@ -584,7 +733,9 @@ function Home() {
         {loadingPolls && (
           <div style={{ textAlign: "center", padding: "2rem 0" }}>
             <div className="share-spinner" />
-            <p style={{ color: "var(--soft-ink)", marginTop: "0.75rem" }}>A carregar sondagens...</p>
+            <p style={{ color: "var(--soft-ink)", marginTop: "0.75rem" }}>
+              A carregar sondagens...
+            </p>
           </div>
         )}
 
@@ -602,6 +753,14 @@ function Home() {
             return (
               <article className="poll-card" key={poll.pollId}>
                 <div className="poll-main">
+                  {poll.imageUrl && (
+                    <img
+                      className="poll-card-image"
+                      src={poll.imageUrl}
+                      alt={`Imagem da sondagem ${poll.title}`}
+                    />
+                  )}
+
                   <div className="poll-topline">
                     {getStatusBadge(poll)}
                     <small>
@@ -671,6 +830,7 @@ function Home() {
           })}
         </div>
       </div>
+
       <ToastStack toasts={toasts} removeToast={removeToast} />
     </div>
   );
