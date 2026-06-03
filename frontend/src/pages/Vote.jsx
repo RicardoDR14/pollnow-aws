@@ -52,6 +52,7 @@ function Vote() {
       const res = await axios.get(`${API}/polls/${pollId}`);
       setPoll(res.data);
     } catch {
+      toast.error("Sondagem não encontrada.");
     }
 
     setLoading(false);
@@ -100,7 +101,9 @@ function Vote() {
     return (
       <div className="card" style={{ textAlign: "center", padding: "3rem 1.8rem" }}>
         <div className="share-spinner" />
-        <p style={{ color: "var(--soft-ink)", marginTop: "1rem" }}>A carregar...</p>
+        <p style={{ color: "var(--soft-ink)", marginTop: "1rem" }}>
+          A carregar...
+        </p>
       </div>
     );
   }
@@ -109,6 +112,7 @@ function Vote() {
     return (
       <div className="card">
         <p className="error">Sondagem não encontrada.</p>
+        <ToastStack toasts={toasts} removeToast={removeToast} />
       </div>
     );
   }
@@ -117,96 +121,99 @@ function Vote() {
     poll.status !== "open" || new Date() > new Date(poll.closesAt);
 
   return (
-    <div className="card">
-      <h1>{poll.title}</h1>
+    <div className="vote-page">
+      <div className="card vote-card">
+        {poll.imageUrl && (
+          <img
+            className="poll-hero-image"
+            src={poll.imageUrl}
+            alt={`Imagem da sondagem ${poll.title}`}
+          />
+        )}
 
-      {poll.description && (
-        <p style={{ color: "#666", marginBottom: "1rem" }}>
-          {poll.description}
-        </p>
-      )}
+        <div className="vote-header">
+          <span className={isClosed ? "status-pill closed" : "status-pill open"}>
+            {isClosed ? "Fechada" : "Aberta para votação"}
+          </span>
 
-      <p style={{ color: "#888", marginBottom: "1.5rem" }}>
-        Fecha: {new Date(poll.closesAt).toLocaleString("pt-PT")}
-      </p>
+          <h1>{poll.title}</h1>
 
-      {isClosed && (
-        <div
-          style={{
-            background: "#fee2e2",
-            padding: "1rem",
-            borderRadius: "8px",
-            marginBottom: "1rem",
-          }}
-        >
-          🔒 Esta sondagem já está fechada. Já não é possível votar ou alterar o voto.
+          {poll.description && (
+            <p style={{ color: "var(--soft-ink)", marginBottom: "1rem" }}>
+              {poll.description}
+            </p>
+          )}
+
+          <p style={{ color: "var(--lavender-grey)", marginBottom: "1.5rem" }}>
+            Fecha: {new Date(poll.closesAt).toLocaleString("pt-PT")}
+          </p>
         </div>
-      )}
 
-      {!isClosed && previousVote && (
-        <div
-          style={{
-            background: "#fef3c7",
-            padding: "1rem",
-            borderRadius: "8px",
-            marginBottom: "1rem",
-          }}
-        >
-          ⚠️ Já votaste nesta sondagem. Podes alterar o teu voto enquanto a sondagem estiver aberta.
-          <br />
-          <strong>Voto atual:</strong> {previousVote}
-        </div>
-      )}
+        {isClosed && (
+          <div className="closed-warning">
+            🔒 Esta sondagem já está fechada. Já não é possível votar ou alterar o voto.
+          </div>
+        )}
 
-      {!isClosed && (
-        <div>
-          {poll.options.map((opt) => (
-            <div
-              key={opt}
-              onClick={() => setSelected(opt)}
-              style={{
-                padding: "1rem",
-                border: `2px solid ${selected === opt ? "#4f46e5" : "#e5e7eb"}`,
-                borderRadius: "8px",
-                marginBottom: "0.8rem",
-                cursor: "pointer",
-                background: selected === opt ? "#eef2ff" : "white",
-                fontWeight: selected === opt ? 600 : 400,
-                transition: "all 0.15s",
-              }}
-            >
-              {opt}
-              {previousVote === opt && (
-                <span style={{ color: "#10b981", marginLeft: "0.5rem" }}>
-                  voto atual
-                </span>
-              )}
+        {!isClosed && previousVote && (
+          <div className="vote-warning">
+            ⚠️ Já votaste nesta sondagem. Podes alterar o teu voto enquanto a sondagem estiver aberta.
+            <br />
+            <strong>Voto atual:</strong> {previousVote}
+          </div>
+        )}
+
+        {!isClosed && (
+          <div>
+            <div className="vote-options">
+              {poll.options.map((opt) => (
+                <button
+                  key={opt}
+                  type="button"
+                  className={`vote-option ${selected === opt ? "selected" : ""}`}
+                  onClick={() => setSelected(opt)}
+                >
+                  <span>{opt}</span>
+
+                  {previousVote === opt && (
+                    <small>voto atual</small>
+                  )}
+                </button>
+              ))}
             </div>
-          ))}
+
+            <button
+              className="btn btn-primary"
+              onClick={handleVote}
+              disabled={voting}
+            >
+              {voting
+                ? "A guardar..."
+                : previousVote
+                  ? "Alterar voto"
+                  : "Votar"}
+            </button>
+          </div>
+        )}
+
+        <div className="vote-footer-actions">
+          <button
+            className="btn btn-secondary"
+            onClick={() => navigate(`/results/${pollId}`)}
+          >
+            Ver resultados
+          </button>
 
           <button
-            className="btn btn-primary"
-            onClick={handleVote}
-            disabled={voting}
+            className="btn btn-ghost"
+            onClick={() => navigate(`/share/${pollId}`)}
           >
-            {voting
-              ? "A guardar..."
-              : previousVote
-                ? "Alterar voto"
-                : "Votar"}
+            Partilhar
           </button>
         </div>
-      )}
 
-      <br />
-
-      <button
-        className="btn btn-secondary"
-        onClick={() => navigate(`/results/${pollId}`)}
-      >
-        Ver resultados
-      </button>
-      <ToastStack toasts={toasts} removeToast={removeToast} />
+        <ToastStack toasts={toasts} removeToast={removeToast} />
+      </div>
     </div>
   );
 }
