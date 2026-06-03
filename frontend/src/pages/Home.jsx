@@ -544,6 +544,19 @@ function Home() {
         </div>
       </section>
 
+      <section className="stack-strip">
+  <span>Serverless stack</span>
+  <div>
+    <strong>Netlify</strong>
+    <strong>API Gateway</strong>
+    <strong>Lambda</strong>
+    <strong>DynamoDB</strong>
+    <strong>S3</strong>
+    <strong>SNS</strong>
+    <strong>EventBridge</strong>
+  </div>
+</section>
+
       <div className={`card form-card ${editingPoll ? "editing-card" : ""}`}>
         <div className="card-heading-row">
           <div>
@@ -740,8 +753,28 @@ function Home() {
         )}
 
         {!loadingPolls && filteredPolls.length === 0 && (
-          <p style={{ color: "#8491a3" }}>Nenhuma sondagem encontrada.</p>
-        )}
+  <div className="empty-state">
+    <div className="empty-icon">☑</div>
+    <h3>
+      {search
+        ? "Nenhuma sondagem corresponde à pesquisa."
+        : "Ainda não tens sondagens."}
+    </h3>
+    <p>
+      {search
+        ? "Experimenta procurar por outro título, descrição ou estado."
+        : "Cria a tua primeira poll, adiciona opções, define uma data de fecho e partilha com QR Code."}
+    </p>
+    {!search && (
+      <button
+        className="btn btn-primary"
+        onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+      >
+        Criar primeira sondagem
+      </button>
+    )}
+  </div>
+)}
 
         <div className="poll-grid">
           {filteredPolls.map((poll) => {

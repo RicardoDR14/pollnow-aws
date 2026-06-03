@@ -903,3 +903,87 @@ input:focus {
     width: 100%;
   }
 }
+
+
+/* Phase 8 — Final polish */
+
+.stack-strip {
+  margin: -0.2rem 0 1.4rem;
+  padding: 1rem;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-soft);
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.stack-strip span {
+  color: var(--lavender-grey);
+  font-weight: 850;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+}
+
+.stack-strip div {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.stack-strip strong {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.38rem 0.7rem;
+  border-radius: 999px;
+  background: rgba(188, 235, 203, 0.55);
+  color: #305f37;
+  font-size: 0.8rem;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 2.5rem 1rem;
+  border: 1px dashed rgba(147, 180, 139, 0.45);
+  border-radius: 20px;
+  background: rgba(247, 255, 246, 0.65);
+}
+
+.empty-icon {
+  width: 58px;
+  height: 58px;
+  margin: 0 auto 1rem;
+  display: grid;
+  place-items: center;
+  border-radius: 20px;
+  background: linear-gradient(135deg, var(--light-green), var(--celadon));
+  box-shadow: var(--shadow-soft);
+  font-size: 1.8rem;
+}
+
+.empty-state h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1.35rem;
+  letter-spacing: -0.03em;
+}
+
+.empty-state p {
+  max-width: 540px;
+  margin: 0 auto 1.2rem;
+  color: var(--soft-ink);
+  line-height: 1.6;
+}
+
+@media (max-width: 640px) {
+  .stack-strip {
+    align-items: flex-start;
+  }
+
+  .stack-strip div {
+    width: 100%;
+  }
+}
