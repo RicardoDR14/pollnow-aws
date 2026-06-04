@@ -41,7 +41,7 @@ export const handler = async (event) => {
 
     if (!username || !email || !password) {
       return corsResponse(400, {
-        error: "Username, email e password são obrigatórios",
+        error: "Username, email e password sao obrigatorios",
       });
     }
 
@@ -64,7 +64,7 @@ export const handler = async (event) => {
 
     if ((existing.Items || []).length > 0) {
       return corsResponse(409, {
-        error: "Já existe um utilizador com esse email ou username",
+        error: "Ja existe um utilizador com esse email ou username",
       });
     }
 

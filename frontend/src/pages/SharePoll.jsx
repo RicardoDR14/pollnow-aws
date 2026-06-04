@@ -70,7 +70,11 @@ function SharePoll() {
             className="share-brand"
             style={{ justifyContent: "center", marginBottom: "1.4rem" }}
           >
-            <span className="share-logo">☑</span>
+            <span className="share-logo">
+              <svg viewBox="0 0 64 64" width="55%" height="55%" fill="none">
+                <polyline points="14,33 26,46 50,20" stroke="#172033" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </span>
             <div>
               <h1 style={{ margin: 0 }}>PollNow</h1>
             </div>

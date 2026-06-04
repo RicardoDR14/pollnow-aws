@@ -16,7 +16,11 @@ function Navbar() {
     <nav className="top-nav">
       <div className="nav-left">
         <Link to="/" className="brand-link">
-          <span className="brand-icon">☑</span>
+          <span className="brand-icon">
+            <svg viewBox="0 0 64 64" width="55%" height="55%" fill="none">
+              <polyline points="14,33 26,46 50,20" stroke="#172033" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </span>
           <span>PollNow</span>
         </Link>
 

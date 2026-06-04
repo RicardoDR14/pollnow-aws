@@ -1,393 +1,157 @@
 # PollNow — Final Test Checklist
 
-## Objective
+Use this checklist to validate the full application before presentation.
+All tests assume a clean deployment with all lambdas deployed and env vars set.
 
-This checklist validates the final version of PollNow before the project presentation and report submission.
-
-It should be used after all phases are implemented and deployed.
+> **Note:** For notification tests (section 9), use a **new user** registered
+> with a **real, accessible email**. Old accounts registered before phase 9 may
+> not receive SNS emails.
 
 ---
 
 ## 1. Frontend access
 
-### 1.1 Open live application
-
-Open:
-
-```text
-https://pollnow.netlify.app/
-```
-
-Expected result:
-
-- application loads correctly;
-- browser tab shows `PollNow`;
-- dashboard/login page appears without visual errors.
+- [ ] Open the Netlify URL — application loads without errors.
+- [ ] Browser tab shows `PollNow`.
+- [ ] Unauthenticated access redirects to login.
 
 ---
 
 ## 2. Authentication
 
-### 2.1 Register new user
-
-1. Open the register page.
-2. Create a new user with username, email and password.
-
-Expected result:
-
-- user is created successfully;
-- user can log in after registration.
+- [ ] Register new user (username + real email + password ≥ 6 chars).
+- [ ] Login with credentials → dashboard opens, username in navbar.
+- [ ] Login with wrong password → error shown.
+- [ ] Logout → private dashboard no longer accessible.
 
 ---
 
-### 2.2 Login
+## 3. User isolation
 
-1. Open the login page.
-2. Enter valid credentials.
-
-Expected result:
-
-- user logs in successfully;
-- dashboard opens;
-- username appears in the navigation bar.
-
----
-
-### 2.3 Logout
-
-1. Click `Sair`.
-
-Expected result:
-
-- user is logged out;
-- private dashboard is no longer accessible without login.
-
----
-
-## 3. User poll separation
-
-### 3.1 Create poll with User 1
-
-1. Login as User 1.
-2. Create a poll.
-
-Expected result:
-
-- poll appears in User 1 dashboard.
-
----
-
-### 3.2 Login as User 2
-
-1. Logout from User 1.
-2. Login as User 2.
-
-Expected result:
-
-- User 2 does not see User 1 polls.
+- [ ] Create poll as User A.
+- [ ] Login as User B → User A polls not visible.
 
 ---
 
 ## 4. Poll creation
 
-### 4.1 Create poll without image
-
-1. Login.
-2. Create a poll with:
-   - title;
-   - description;
-   - at least 2 options;
-   - closing date;
-   - notification email.
-3. Do not select an image.
-
-Expected result:
-
-- poll is created successfully;
-- share page opens;
-- poll appears in dashboard;
-- public vote page works;
-- results page works.
-
----
-
-### 4.2 Create poll with image
-
-1. Login.
-2. Create a poll.
-3. Select a JPG, PNG or WEBP image under 1.5MB.
-4. Submit.
-
-Expected result:
-
-- poll is created successfully;
-- image preview appears before creation;
-- image is uploaded to S3;
-- `imageUrl` is saved in DynamoDB;
-- image appears in dashboard;
-- image appears on vote page;
-- image appears on results page;
-- image appears on share page.
-
----
-
-### 4.3 Required notification email
-
-Try creating a poll without notification email.
-
-Expected result:
-
-- frontend blocks creation;
-- API also rejects the request if called directly.
-
-Expected backend response:
-
-```text
-400 — Email para notificação obrigatório
-```
-
----
-
-### 4.4 Invalid image format
-
-Try uploading unsupported files:
-
-```text
-PDF
-TXT
-GIF
-```
-
-Expected result:
-
-```text
-Formato inválido. Usa JPG, PNG ou WEBP.
-```
-
----
-
-### 4.5 Image too large
-
-Try uploading an image larger than:
-
-```text
-1.5MB
-```
-
-Expected result:
-
-```text
-A imagem deve ter no máximo 1.5MB.
-```
+- [ ] Create poll without image → poll appears in dashboard, share page opens.
+- [ ] Create poll with JPG/PNG/WEBP image (< 1.5 MB) → image visible in
+  dashboard, vote page, results page, share page.
+- [ ] Upload unsupported format (PDF/GIF) → frontend blocks with message.
+- [ ] Upload image > 1.5 MB → frontend blocks with message.
+- [ ] Submit with empty title → blocked.
+- [ ] Submit with < 2 options → blocked.
+- [ ] Submit with past closing date → blocked.
 
 ---
 
 ## 5. Poll management
 
-### 5.1 Edit poll
-
-1. Click `Editar`.
-2. Change title, description, options or closing date.
-3. Save changes.
-
-Expected result:
-
-- form clearly enters edit mode;
-- poll is updated;
-- dashboard shows the updated data.
+- [ ] Edit poll → form enters edit mode, changes saved, dashboard updates.
+- [ ] Close poll manually → status changes, voting blocked.
+- [ ] Delete poll → disappears from dashboard.
+- [ ] Search by title / status / description → filters correctly.
 
 ---
 
-### 5.2 Close poll manually
+## 6. Voting (anonymous, no login required)
 
-1. Click `Fechar`.
-2. Confirm action.
-
-Expected result:
-
-- poll status changes to closed;
-- voting is blocked;
-- results remain visible.
-
----
-
-### 5.3 Delete poll
-
-1. Click `Eliminar`.
-2. Confirm action.
-
-Expected result:
-
-- poll disappears from dashboard;
-- poll is removed from DynamoDB;
-- associated votes are removed if delete logic is active.
-
----
-
-## 6. Voting
-
-### 6.1 Vote first time
-
-1. Open `/vote/{pollId}`.
-2. Select an option.
-3. Click `Votar`.
-
-Expected result:
-
-- vote is saved;
-- user is redirected to results.
-
----
-
-### 6.2 Change vote while open
-
-1. Open the same poll again.
-2. Select a different option.
-3. Click `Alterar voto`.
-
-Expected result:
-
-- vote is updated;
-- total votes do not increase incorrectly;
-- results reflect the changed vote.
-
----
-
-### 6.3 Vote on closed poll
-
-1. Close a poll.
-2. Open `/vote/{pollId}`.
-
-Expected result:
-
-- voting is blocked;
-- clear message says the poll is closed.
+- [ ] Open `/vote/{pollId}` without login → voting available.
+- [ ] Vote on open poll → redirected to results.
+- [ ] Open same poll again → can change vote.
+- [ ] Open closed poll → voting blocked with clear message.
 
 ---
 
 ## 7. Results
 
-### 7.1 Results page
+- [ ] `/results/{pollId}` shows chart, percentages, totals.
+- [ ] Open polls show live-update indicator.
+- [ ] Results match votes cast.
 
-Open:
+---
 
-```text
-/results/{pollId}
+## 8. QR Code sharing
+
+- [ ] `/share/{pollId}` loads QR Code, public link, copy-link and download buttons.
+- [ ] Scanning QR Code opens `/vote/{pollId}`.
+- [ ] Share page does not expose edit / delete / close actions.
+
+---
+
+## 9. Per-owner email notifications
+
+> Use an account registered with a real email you can access.
+
+### Activate
+
+- [ ] Dashboard shows notification card with "Ativar notificações" (off state).
+- [ ] Click "Ativar notificações" → card changes to pending state with email address shown.
+- [ ] SNS confirmation email arrives (check spam).
+- [ ] Click the confirmation link.
+- [ ] Log out → log back in → status is `on` → card shows "Notificações ativas".
+
+### Result email
+
+- [ ] Create a poll with a closing time a few minutes ahead.
+- [ ] Cast votes.
+- [ ] Wait up to 5 minutes after close time.
+- [ ] Owner receives email: `Sondagem "<title>" fechou!` with results.
+- [ ] CloudWatch `/aws/lambda/checkExpired` shows `SNS publish: sondagem ... | ownerId=...`.
+- [ ] Poll status in DynamoDB changes to `notified`.
+- [ ] Result CSV exists at `s3://<bucket>/results/<pollId>.csv`.
+- [ ] Another user's account does **not** receive this email.
+
+### Deactivate
+
+- [ ] Click "Desativar notificações" → status returns to off.
+- [ ] SNS Console → subscription removed (or pending expiry if was pending).
+- [ ] Subsequent closed poll does not send email to this user.
+
+### Known bug — conflict on re-subscribe
+
+If clicking "Ativar notificações" returns the error
+`"O teu email ja esta subscrito a este topico com configuracao diferente"`:
+
+1. Go to SNS Console → Subscriptions.
+2. Delete the existing subscription for this email.
+3. Wait 30–60 seconds.
+4. Click "Ativar notificações" again.
+
+---
+
+## 10. Admin SNS notifications
+
+- [ ] Create poll → admin inbox receives `PollNow - Nova sondagem criada`.
+- [ ] Edit poll → admin inbox receives notification.
+- [ ] Close poll → admin inbox receives notification.
+- [ ] Delete poll → admin inbox receives notification.
+
+---
+
+## 11. EventBridge
+
+- [ ] `checkExpired` Lambda has EventBridge invoke permission.
+- [ ] CloudWatch shows scheduled executions every ~5 minutes.
+
+---
+
+## 12. AWS resource check
+
+- [ ] API Gateway — all routes active and CORS enabled.
+- [ ] DynamoDB — `users`, `polls`, `votes` tables exist and contain correct data.
+- [ ] S3 — poll images accessible publicly.
+- [ ] SNS — `pollnow-notifications` topic exists; admin subscription confirmed.
+- [ ] All 12 lambdas deployed with correct env vars.
+- [ ] CloudWatch — no critical errors in recent logs.
+
+---
+
+## 13. Build check
+
+```bash
+cd frontend && npm run build
 ```
 
-Expected result:
-
-- title appears;
-- image appears if poll has image;
-- chart appears;
-- result list appears;
-- total votes appears;
-- open polls show live update indicator.
-
----
-
-## 8. Sharing and QR Code
-
-### 8.1 Share page
-
-Open:
-
-```text
-/share/{pollId}
-```
-
-Expected result:
-
-- poll title appears;
-- poll image appears if available;
-- QR Code appears;
-- public voting link appears;
-- copy link works;
-- download QR works.
-
----
-
-### 8.2 QR Code scan
-
-Scan the QR Code with a phone.
-
-Expected result:
-
-- opens `/vote/{pollId}`;
-- user can vote if poll is open;
-- user cannot edit, delete or close the poll.
-
----
-
-## 9. SNS notifications
-
-Confirm email notifications are received when:
-
-- poll is created;
-- poll is edited;
-- poll is closed manually;
-- poll is deleted;
-- expired poll is processed by `checkExpired`.
-
-Expected result:
-
-- email arrives through SNS;
-- message includes relevant poll information.
-
----
-
-## 10. EventBridge
-
-If EventBridge is active:
-
-1. Create a poll with a short closing time.
-2. Wait for the scheduled rule.
-
-Expected result:
-
-- `checkExpired` runs;
-- expired poll is processed;
-- SNS notification is sent;
-- final results/export logic works if configured.
-
----
-
-## 11. AWS validation
-
-Confirm AWS resources:
-
-- API Gateway routes are active;
-- Lambda functions are deployed;
-- DynamoDB tables contain correct data;
-- S3 image bucket stores poll images;
-- SNS topic has confirmed subscriptions;
-- EventBridge rule is enabled;
-- CloudWatch logs do not show critical errors.
-
----
-
-## 12. Final acceptance checklist
-
-Before presentation, confirm:
-
-- [ ] Register works.
-- [ ] Login works.
-- [ ] Logout works.
-- [ ] Polls are separated by user.
-- [ ] Poll creation without image works.
-- [ ] Poll creation with image works.
-- [ ] Required notification email is enforced.
-- [ ] Edit poll works.
-- [ ] Close poll works.
-- [ ] Delete poll works.
-- [ ] Vote works.
-- [ ] Vote update works.
-- [ ] Closed poll blocks voting.
-- [ ] Results page works.
-- [ ] QR Code share works.
-- [ ] Share page works.
-- [ ] SNS emails work.
-- [ ] S3 images load publicly.
-- [ ] Netlify direct route refresh works.
-- [ ] No major console errors.
-- [ ] Final report screenshots are collected.
+Expected: `Compiled successfully.`

@@ -1,5 +1,10 @@
 # Phase 7 — Optional Poll Images Checklist
 
+> **Note (superseded in part):** The per-poll "notification email" field
+> described here has been removed. Poll owners can subscribe to receive results
+> via the notification toggle on the dashboard (SNS per-user subscription) —
+> see `docs/owner-notifications-sns.md`.
+
 ## Objective
 
 This phase adds optional images to PollNow polls.

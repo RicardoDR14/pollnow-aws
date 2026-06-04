@@ -7,7 +7,7 @@ import { SNSClient, PublishCommand } from "@aws-sdk/client-sns";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 
 const dynamo = new DynamoDBClient({});
-const sns = new SNSClient({ region: process.env.SNS_REGION });
+const sns = new SNSClient({ region: process.env.SNS_REGION || "us-east-1" });
 const s3 = new S3Client({});
 
 export const handler = async () => {
@@ -29,6 +29,7 @@ export const handler = async () => {
     for (const poll of Items || []) {
       const pollId = poll.pollId.S;
       const title = poll.title.S;
+      const ownerId = poll.ownerId?.S || "";
       const options = poll.options.L.map((o) => o.S);
 
       // Buscar votos desta sondagem
@@ -56,16 +57,7 @@ export const handler = async () => {
         )
         .join("\n");
 
-      // Enviar email via SNS topic
-      await sns.send(
-        new PublishCommand({
-          TopicArn: process.env.SNS_TOPIC_ARN,
-          Subject: `Sondagem "${title}" fechou!`,
-          Message: `A tua sondagem "${title}" fechou!\n\nResultados:\n${resultLines}\n\nTotal: ${total} participantes.`,
-        }),
-      );
-
-      // Gerar CSV e guardar no S3 (nota extra)
+      // Gerar CSV e guardar no S3
       const csvLines = [
         "Opcao,Votos,Percentagem",
         ...options.map(
@@ -82,7 +74,37 @@ export const handler = async () => {
         }),
       );
 
-      // Marcar como notificada
+      // Publicar resultados via SNS com MessageAttribute ownerId para que o
+      // SNS encaminhe apenas para o subscriber cujo FilterPolicy corresponde.
+      if (process.env.SNS_TOPIC_ARN) {
+        if (ownerId) {
+          console.log(
+            `SNS publish: sondagem ${pollId} | ownerId=${ownerId}`,
+          );
+          await sns.send(
+            new PublishCommand({
+              TopicArn: process.env.SNS_TOPIC_ARN,
+              Subject: `Sondagem "${title}" fechou!`,
+              Message:
+                `A tua sondagem "${title}" fechou!\n\n` +
+                `Resultados:\n${resultLines}\n\n` +
+                `Total: ${total} participantes.`,
+              MessageAttributes: {
+                ownerId: {
+                  DataType: "String",
+                  StringValue: ownerId,
+                },
+              },
+            }),
+          );
+        } else {
+          console.warn(
+            `Sondagem ${pollId} sem ownerId -- SNS nao publicado.`,
+          );
+        }
+      }
+
+      // Marcar como notificada independentemente do envio SNS
       await dynamo.send(
         new UpdateItemCommand({
           TableName: process.env.POLLS_TABLE,
@@ -93,7 +115,7 @@ export const handler = async () => {
         }),
       );
 
-      console.log(`Email enviado — sondagem ${pollId} encerrada.`);
+      console.log(`Sondagem ${pollId} encerrada e marcada como notified.`);
     }
 
     return {
