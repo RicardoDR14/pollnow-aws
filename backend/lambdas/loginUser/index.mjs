@@ -1,7 +1,12 @@
 import { DynamoDBClient, ScanCommand } from "@aws-sdk/client-dynamodb";
-import crypto from "crypto";
+import {
+  SNSClient,
+  GetSubscriptionAttributesCommand,
+} from "@aws-sdk/client-sns";
+import crypto from "node:crypto";
 
 const dynamo = new DynamoDBClient({});
+const sns = new SNSClient({ region: process.env.SNS_REGION || "us-east-1" });
 
 function corsResponse(statusCode, body) {
   return {
@@ -16,7 +21,7 @@ function corsResponse(statusCode, body) {
 }
 
 function verifyPassword(password, storedPasswordHash) {
-  if (!storedPasswordHash || !storedPasswordHash.includes(":")) {
+  if (!storedPasswordHash?.includes(":")) {
     return false;
   }
 
@@ -27,6 +32,31 @@ function verifyPassword(password, storedPasswordHash) {
     .toString("hex");
 
   return hash === storedHash;
+}
+
+// Determina o estado da subscricao SNS do user:
+//   "off"     -> sem notificationSubArn
+//   "pending" -> ARN e "pending confirmation" (ainda nao confirmado)
+//   "on"      -> ARN real confirmado
+async function getNotificationStatus(user) {
+  const subArn = user.notificationSubArn?.S;
+
+  if (!subArn) return "off";
+  if (subArn === "pending confirmation") return "pending";
+
+  if (subArn.startsWith("arn:aws:sns")) {
+    try {
+      const { Attributes } = await sns.send(
+        new GetSubscriptionAttributesCommand({ SubscriptionArn: subArn }),
+      );
+      return Attributes?.PendingConfirmation === "true" ? "pending" : "on";
+    } catch (err) {
+      console.warn("Falha ao verificar subscricao SNS:", err.message);
+      return "on";
+    }
+  }
+
+  return "off";
 }
 
 export const handler = async (event) => {
@@ -42,7 +72,7 @@ export const handler = async (event) => {
 
     if (!identifier || !password) {
       return corsResponse(400, {
-        error: "Email/username e password são obrigatórios",
+        error: "Email/username e password sao obrigatorios",
       });
     }
 
@@ -59,28 +89,25 @@ export const handler = async (event) => {
     const user = (result.Items || [])[0];
 
     if (!user) {
-      return corsResponse(401, {
-        error: "Credenciais inválidas",
-      });
+      return corsResponse(401, { error: "Credenciais invalidas" });
     }
 
     const isValid = verifyPassword(password, user.passwordHash.S);
 
     if (!isValid) {
-      return corsResponse(401, {
-        error: "Credenciais inválidas",
-      });
+      return corsResponse(401, { error: "Credenciais invalidas" });
     }
+
+    const notificationStatus = await getNotificationStatus(user);
 
     return corsResponse(200, {
       userId: user.userId.S,
       username: user.username.S,
       email: user.email.S,
+      notificationStatus,
     });
   } catch (err) {
     console.error(err);
-    return corsResponse(500, {
-      error: "Erro ao iniciar sessão",
-    });
+    return corsResponse(500, { error: "Erro ao iniciar sessao" });
   }
 };

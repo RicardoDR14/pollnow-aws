@@ -1,5 +1,12 @@
 # Phase 5 — SNS Notifications for Poll Actions Checklist
 
+> **Note (superseded in part):** Poll **result** emails are now delivered
+> per-owner via SNS per-user subscriptions with a filter policy on `ownerId`,
+> not as a broadcast. Each owner subscribes via the dashboard toggle —
+> see `docs/owner-notifications-sns.md`. The admin action notifications
+> (created/edited/closed/deleted) described below remain on the shared SNS
+> topic and are still accurate.
+
 ## Objective
 
 This phase adds SNS email notifications for important poll actions.

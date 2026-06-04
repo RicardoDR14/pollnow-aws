@@ -1,4 +1,8 @@
-import { DynamoDBClient, PutItemCommand } from "@aws-sdk/client-dynamodb";
+import {
+  DynamoDBClient,
+  PutItemCommand,
+  GetItemCommand,
+} from "@aws-sdk/client-dynamodb";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { SNSClient, PublishCommand } from "@aws-sdk/client-sns";
 import crypto from "crypto";
@@ -27,10 +31,6 @@ function corsResponse(statusCode, body) {
   };
 }
 
-function isValidEmail(email) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-}
-
 function getVoteUrl(pollId) {
   const frontendUrl = process.env.FRONTEND_URL || "";
   return frontendUrl ? `${frontendUrl}/vote/${pollId}` : `/vote/${pollId}`;
@@ -51,6 +51,33 @@ async function publishNotification({ subject, message }) {
   );
 }
 
+// Resolve o email do dono a partir do registo do user (fonte autoritativa).
+// O destinatario das notificacoes e SEMPRE o email da conta -- ja nao se
+// pede um email por sondagem.
+async function resolveOwnerEmail(ownerId, fallback) {
+  if (!process.env.USERS_TABLE) {
+    return (fallback || "").trim().toLowerCase();
+  }
+
+  try {
+    const { Item } = await dynamo.send(
+      new GetItemCommand({
+        TableName: process.env.USERS_TABLE,
+        Key: { userId: { S: ownerId } },
+      }),
+    );
+
+    const email = Item?.email?.S;
+    if (email) {
+      return email.trim().toLowerCase();
+    }
+  } catch (err) {
+    console.warn(`Falha ao resolver email do user ${ownerId}:`, err.message);
+  }
+
+  return (fallback || "").trim().toLowerCase();
+}
+
 function parseImagePayload(body) {
   if (!body.image) {
     return null;
@@ -60,14 +87,14 @@ function parseImagePayload(body) {
   let contentType = body.imageContentType || "image/jpeg";
 
   if (typeof base64Image !== "string") {
-    throw new Error("Imagem inválida");
+    throw new Error("Imagem invalida");
   }
 
   if (base64Image.startsWith("data:")) {
     const match = base64Image.match(/^data:(.+);base64,(.+)$/);
 
     if (!match) {
-      throw new Error("Formato da imagem inválido");
+      throw new Error("Formato da imagem invalido");
     }
 
     contentType = match[1];
@@ -75,13 +102,13 @@ function parseImagePayload(body) {
   }
 
   if (!ALLOWED_IMAGE_TYPES[contentType]) {
-    throw new Error("Formato de imagem não suportado. Usa JPG, PNG ou WEBP");
+    throw new Error("Formato de imagem nao suportado. Usa JPG, PNG ou WEBP");
   }
 
   const buffer = Buffer.from(base64Image, "base64");
 
   if (buffer.length > MAX_IMAGE_SIZE_BYTES) {
-    throw new Error("A imagem deve ter no máximo 1.5MB");
+    throw new Error("A imagem deve ter no maximo 1.5MB");
   }
 
   return {
@@ -106,41 +133,25 @@ export const handler = async (event) => {
 
     if (!ownerId) {
       return corsResponse(401, {
-        error: "Utilizador não autenticado",
+        error: "Utilizador nao autenticado",
       });
     }
 
     if (!body.title?.trim()) {
       return corsResponse(400, {
-        error: "Título obrigatório",
+        error: "Titulo obrigatorio",
       });
     }
 
     if (!Array.isArray(body.options) || body.options.length < 2) {
       return corsResponse(400, {
-        error: "A sondagem precisa de pelo menos 2 opções",
+        error: "A sondagem precisa de pelo menos 2 opcoes",
       });
     }
 
     if (!body.closesAt) {
       return corsResponse(400, {
-        error: "Data de fecho obrigatória",
-      });
-    }
-
-    const notificationEmail = (body.authorPhone || body.ownerEmail || "")
-      .trim()
-      .toLowerCase();
-
-    if (!notificationEmail) {
-      return corsResponse(400, {
-        error: "Email para notificação obrigatório",
-      });
-    }
-
-    if (!isValidEmail(notificationEmail)) {
-      return corsResponse(400, {
-        error: "Email para notificação inválido",
+        error: "Data de fecho obrigatoria",
       });
     }
 
@@ -158,7 +169,7 @@ export const handler = async (event) => {
 
     if (cleanOptions.length < 2) {
       return corsResponse(400, {
-        error: "A sondagem precisa de pelo menos 2 opções válidas",
+        error: "A sondagem precisa de pelo menos 2 opcoes validas",
       });
     }
 
@@ -166,7 +177,7 @@ export const handler = async (event) => {
 
     if (new Set(lowerOptions).size !== lowerOptions.length) {
       return corsResponse(400, {
-        error: "As opções não podem ser repetidas",
+        error: "As opcoes nao podem ser repetidas",
       });
     }
 
@@ -176,8 +187,10 @@ export const handler = async (event) => {
     const title = body.title.trim();
     const description = body.description?.trim() || "";
     const ownerUsername = body.ownerUsername || "";
-    const ownerEmail = body.ownerEmail || notificationEmail;
     const voteUrl = getVoteUrl(pollId);
+
+    // O destinatario das notificacoes e o email da conta do dono.
+    const ownerEmail = await resolveOwnerEmail(ownerId, body.ownerEmail);
 
     let imageUrl = "";
     let imageKey = "";
@@ -209,11 +222,13 @@ export const handler = async (event) => {
           ownerId: { S: ownerId },
           ownerUsername: { S: ownerUsername },
           ownerEmail: { S: ownerEmail },
+          // authorPhone mantido apenas por retrocompatibilidade com lambdas
+          // antigos; espelha o ownerEmail.
+          authorPhone: { S: ownerEmail },
           title: { S: title },
           description: { S: description },
           options: { L: cleanOptions.map((option) => ({ S: option })) },
           closesAt: { S: closesAt.toISOString() },
-          authorPhone: { S: notificationEmail },
           imageUrl: { S: imageUrl },
           imageKey: { S: imageKey },
           imageContentType: { S: imageContentType },
@@ -224,17 +239,16 @@ export const handler = async (event) => {
     );
 
     await publishNotification({
-      subject: "PollNow — Nova sondagem criada",
+      subject: "PollNow - Nova sondagem criada",
       message:
         `Uma nova sondagem foi criada no PollNow.\n\n` +
-        `Título: ${title}\n` +
+        `Titulo: ${title}\n` +
         `Criada por: ${ownerUsername || "N/A"}\n` +
-        `Email do autor: ${ownerEmail || "N/A"}\n` +
-        `Email para notificação: ${notificationEmail}\n` +
+        `Email do dono: ${ownerEmail || "N/A"}\n` +
         `Fecha em: ${closesAt.toISOString()}\n` +
-        `Opções: ${cleanOptions.join(", ")}\n` +
+        `Opcoes: ${cleanOptions.join(", ")}\n` +
         `Imagem: ${imageUrl || "Sem imagem"}\n\n` +
-        `Link público para votar:\n${voteUrl}\n\n` +
+        `Link publico para votar:\n${voteUrl}\n\n` +
         `ID da sondagem: ${pollId}`,
     });
 

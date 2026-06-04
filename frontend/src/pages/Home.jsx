@@ -22,6 +22,9 @@ function Home() {
   const [shareUrl, setShareUrl] = useState("");
   const { toasts, removeToast, toast } = useToast();
 
+  const [notificationStatus, setNotificationStatus] = useState(null);
+  const [notifLoading, setNotifLoading] = useState(false);
+
   const [pollImage, setPollImage] = useState({
     file: null,
     previewUrl: "",
@@ -50,6 +53,7 @@ function Home() {
     }
 
     setUser(storedUser);
+    setNotificationStatus(storedUser.notificationStatus || "off");
     setForm((current) => ({
       ...current,
       authorPhone: storedUser.email || "",
@@ -230,15 +234,45 @@ function Home() {
       return "A data de fecho tem de ser futura";
     }
 
-    if (!form.authorPhone.trim()) {
-      return "Email obrigatório para notificação";
-    }
-
-    if (!form.authorPhone.includes("@")) {
-      return "Email inválido";
-    }
-
     return "";
+  };
+
+  const updateUserNotificationStatus = (status) => {
+    const stored = JSON.parse(localStorage.getItem(USER_STORAGE_KEY) || "null");
+    if (stored) {
+      stored.notificationStatus = status;
+      localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(stored));
+    }
+    setNotificationStatus(status);
+  };
+
+  const refreshNotificationStatus = async () => {
+    if (!user?.userId) return;
+    try {
+      const res = await axios.get(`${API}/notifications`, {
+        headers: getAuthHeaders(),
+      });
+      updateUserNotificationStatus(res.data.notificationStatus);
+    } catch (err) {
+      console.warn("Falha ao verificar estado de notificações:", err.message);
+    }
+  };
+
+  const handleToggleNotifications = async (enable) => {
+    setNotifLoading(true);
+    try {
+      const res = await axios.post(
+        `${API}/notifications`,
+        { enabled: enable },
+        { headers: getAuthHeaders() },
+      );
+      updateUserNotificationStatus(res.data.status);
+    } catch (err) {
+      toast.error(
+        err.response?.data?.error || "Erro ao atualizar notificações",
+      );
+    }
+    setNotifLoading(false);
   };
 
   const openPendingShareWindow = () => {
@@ -298,7 +332,7 @@ function Home() {
 </head>
 <body>
   <div class="shell">
-    <div class="logo">☑</div>
+    <div class="logo"><svg viewBox="0 0 64 64" width="55%" height="55%" fill="none"><polyline points="14,33 26,46 50,20" stroke="#172033" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
     <h1>PollNow</h1>
     <div class="spinner"></div>
     <p>A preparar página de partilha…</p>
@@ -544,18 +578,81 @@ function Home() {
         </div>
       </section>
 
-      <section className="stack-strip">
-  <span>Serverless stack</span>
-  <div>
-    <strong>Netlify</strong>
-    <strong>API Gateway</strong>
-    <strong>Lambda</strong>
-    <strong>DynamoDB</strong>
-    <strong>S3</strong>
-    <strong>SNS</strong>
-    <strong>EventBridge</strong>
-  </div>
-</section>
+      <div className="card notification-settings-card">
+        <div className="card-heading-row">
+          <div>
+            <span className="section-kicker">Notificações</span>
+            <h2>Resultados por email</h2>
+          </div>
+        </div>
+
+        {notificationStatus === "off" && (
+          <div>
+            <p>
+              Recebe os resultados das tuas sondagens no email quando fecharem.
+            </p>
+            <button
+              className="btn btn-primary"
+              onClick={() => handleToggleNotifications(true)}
+              disabled={notifLoading}
+              style={{ marginTop: "0.75rem" }}
+            >
+              {notifLoading ? "A processar..." : "Ativar notificações"}
+            </button>
+          </div>
+        )}
+
+        {notificationStatus === "pending" && (
+          <div>
+            <p>
+              Enviámos um email de confirmação para{" "}
+              <strong>{user?.email}</strong>. Confirma-o para ativar as
+              notificações.
+            </p>
+            <div
+              style={{ display: "flex", gap: "0.75rem", marginTop: "0.75rem" }}
+            >
+              <button
+                className="btn btn-secondary"
+                onClick={refreshNotificationStatus}
+                disabled={notifLoading}
+              >
+                Verificar estado
+              </button>
+              <button
+                className="btn btn-ghost"
+                onClick={() => handleToggleNotifications(false)}
+                disabled={notifLoading}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
+
+        {notificationStatus === "on" && (
+          <div>
+            <p>
+              Notificações ativas. Recebes os resultados em{" "}
+              <strong>{user?.email}</strong>.
+            </p>
+            <button
+              className="btn btn-secondary"
+              onClick={() => handleToggleNotifications(false)}
+              disabled={notifLoading}
+              style={{ marginTop: "0.75rem" }}
+            >
+              {notifLoading ? "A processar..." : "Desativar notificações"}
+            </button>
+          </div>
+        )}
+
+        {!notificationStatus && (
+          <p style={{ color: "var(--soft-ink)" }}>
+            A carregar estado das notificações...
+          </p>
+        )}
+      </div>
 
       <div className={`card form-card ${editingPoll ? "editing-card" : ""}`}>
         <div className="card-heading-row">
@@ -575,7 +672,7 @@ function Home() {
             <br />
             <small>
               Estás a alterar uma poll existente. Para voltar ao modo normal,
-              clica em “Cancelar edição”.
+              clica em "Cancelar edição".
             </small>
           </div>
         )}
@@ -687,17 +784,6 @@ function Home() {
               onChange={(e) => setForm({ ...form, closesAt: e.target.value })}
             />
           </div>
-
-          <div className="form-field">
-            <label>Email para notificação</label>
-            <input
-              placeholder="Ex: autor@email.com"
-              value={form.authorPhone}
-              onChange={(e) =>
-                setForm({ ...form, authorPhone: e.target.value })
-              }
-            />
-          </div>
         </div>
 
         {shareUrl && (
@@ -753,28 +839,28 @@ function Home() {
         )}
 
         {!loadingPolls && filteredPolls.length === 0 && (
-  <div className="empty-state">
-    <div className="empty-icon">☑</div>
-    <h3>
-      {search
-        ? "Nenhuma sondagem corresponde à pesquisa."
-        : "Ainda não tens sondagens."}
-    </h3>
-    <p>
-      {search
-        ? "Experimenta procurar por outro título, descrição ou estado."
-        : "Cria a tua primeira poll, adiciona opções, define uma data de fecho e partilha com QR Code."}
-    </p>
-    {!search && (
-      <button
-        className="btn btn-primary"
-        onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-      >
-        Criar primeira sondagem
-      </button>
-    )}
-  </div>
-)}
+          <div className="empty-state">
+            <div className="empty-icon">☑</div>
+            <h3>
+              {search
+                ? "Nenhuma sondagem corresponde à pesquisa."
+                : "Ainda não tens sondagens."}
+            </h3>
+            <p>
+              {search
+                ? "Experimenta procurar por outro título, descrição ou estado."
+                : "Cria a tua primeira poll, adiciona opções, define uma data de fecho e partilha com QR Code."}
+            </p>
+            {!search && (
+              <button
+                className="btn btn-primary"
+                onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+              >
+                Criar primeira sondagem
+              </button>
+            )}
+          </div>
+        )}
 
         <div className="poll-grid">
           {filteredPolls.map((poll) => {
@@ -821,19 +907,23 @@ function Home() {
                     Resultados
                   </button>
 
-                  <button
-                    className="btn btn-secondary"
-                    onClick={() => openShareWindow(poll.pollId)}
-                  >
-                    Partilhar
-                  </button>
+                  {!isClosed && (
+                    <button
+                      className="btn btn-secondary"
+                      onClick={() => openShareWindow(poll.pollId)}
+                    >
+                      Partilhar
+                    </button>
+                  )}
 
-                  <button
-                    className="btn btn-ghost"
-                    onClick={() => copyShareLink(poll.pollId)}
-                  >
-                    Copiar link
-                  </button>
+                  {!isClosed && (
+                    <button
+                      className="btn btn-ghost"
+                      onClick={() => copyShareLink(poll.pollId)}
+                    >
+                      Copiar link
+                    </button>
+                  )}
 
                   <button
                     className="btn btn-secondary"

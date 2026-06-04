@@ -8,303 +8,142 @@ PollNow
 
 ## Short description
 
-PollNow is a serverless web application for creating, sharing and voting in online polls.
-
-Users can create polls, manage their own polls, share them through public links or QR Codes, collect votes and view results in real time.
+PollNow is a serverless web application for creating, sharing and voting in
+online polls. Users manage their polls from a private dashboard, share them
+via public links and QR Codes, and can subscribe to receive results by email
+when their polls close.
 
 ---
 
 ## Main goal
 
-The goal of PollNow is to provide a simple and accessible polling platform using AWS serverless services.
-
-The application allows:
-
-- user registration and login;
-- private dashboard per user;
-- poll creation;
-- poll editing;
-- poll closing;
-- poll deletion;
-- public voting;
-- vote update while poll is open;
-- results visualization;
-- QR Code sharing;
-- optional poll images;
-- email notifications through SNS.
+Demonstrate a complete AWS serverless architecture using multiple managed
+services, integrating authentication, data storage, file storage, scheduled
+automation, and pub/sub notifications in a practical and interactive
+application.
 
 ---
 
-## Main features
+## Implemented features
 
 ### Authentication
 
-PollNow includes a simple authentication mechanism.
-
-Users can:
-
-- register;
-- log in;
-- access a private dashboard;
-- see only their own polls.
-
----
+- Registration with username, email and password.
+- Login returning user identity and notification status.
+- Private dashboard per user — each user sees only their own polls.
 
 ### Poll management
 
-Authenticated users can:
+- Create polls with title, description, options, closing date and optional image.
+- Edit existing polls.
+- Close polls manually.
+- Delete polls.
+- Search polls by title, description or status.
 
-- create polls;
-- edit polls;
-- close polls manually;
-- delete polls;
-- search existing polls.
+### Optional poll images
 
-Each poll belongs to a user through an owner identifier.
+- Upload JPG, PNG or WEBP images (max 1.5 MB) stored in Amazon S3.
+- Images displayed on dashboard, voting page, results page and share page.
 
----
+### Public voting (anonymous)
 
-### Public voting
-
-Poll voting is public through a link:
-
-```text
-/vote/{pollId}
-```
-
-Users can vote without accessing the private dashboard.
-
-If the poll is still open, users can also change their vote from the same browser.
-
-If the poll is closed, voting is blocked.
-
----
+- Vote at `/vote/{pollId}` without authentication.
+- Change vote while poll is open (browser-session-based identity).
+- Voting blocked on closed polls.
 
 ### Results
 
-Poll results are available through:
-
-```text
-/results/{pollId}
-```
-
-The results page includes:
-
-- total votes;
-- chart visualization;
-- result percentage per option;
-- live update indicator for open polls.
-
----
+- View results at `/results/{pollId}` with chart, percentages and totals.
+- Open polls show a live-update indicator.
 
 ### QR Code sharing
 
-Polls can be shared through:
+- Share page at `/share/{pollId}` with QR Code, copy-link and download-QR.
+- QR Code points only to the public voting route — no edit/delete access.
 
-```text
-/share/{pollId}
-```
+### Per-owner email notifications (phase 9)
 
-This page includes:
+- Dashboard toggle to subscribe/unsubscribe to result emails.
+- Each subscription uses a SNS filter policy `{ "ownerId": [userId] }` so
+  users receive results only for their own polls.
+- Three states: `off` / `pending` (awaiting confirmation) / `on` (active).
+- Admin action notifications (created/edited/closed/deleted) continue as
+  an unfiltered broadcast on the same SNS topic.
 
-- QR Code;
-- public voting link;
-- copy link button;
-- download QR button.
+### Automatic poll expiration
 
-The QR Code points only to the voting page, so it does not expose edit, delete or close actions.
-
----
-
-### Optional images
-
-Polls can include an optional image.
-
-The image can represent:
-
-- a candidate;
-- an organization;
-- an event;
-- a class;
-- a campaign;
-- any visual identity related to the poll.
-
-Images are stored in Amazon S3 and displayed in:
-
-- dashboard;
-- voting page;
-- results page;
-- share page.
+- EventBridge rule triggers `checkExpired` every 5 minutes.
+- Expired polls: aggregate votes, export CSV to S3, publish result email
+  via SNS with ownerId routing, mark as `notified`.
 
 ---
 
-### SNS notifications
-
-PollNow sends email notifications through Amazon SNS when important poll actions happen:
-
-- poll created;
-- poll edited;
-- poll closed;
-- poll deleted;
-- poll expired and processed automatically.
-
----
-
-## AWS services used
+## AWS services
 
 | Service | Usage |
 |---|---|
-| Amazon API Gateway | Exposes backend HTTP endpoints |
-| AWS Lambda | Runs backend logic |
-| Amazon DynamoDB | Stores users, polls and votes |
-| Amazon S3 | Stores poll images and generated files |
-| Amazon SNS | Sends email notifications |
-| Amazon EventBridge | Triggers scheduled poll expiration checks |
-| Amazon CloudWatch | Stores Lambda execution logs |
+| Amazon API Gateway | HTTP API exposing all backend endpoints |
+| AWS Lambda | All backend logic (12 functions) |
+| Amazon DynamoDB | Users, polls and votes storage |
+| Amazon S3 | Poll images and result CSV exports |
+| Amazon SNS | Admin action notifications + per-owner result emails |
+| Amazon EventBridge | Scheduled poll expiration check (every 5 min) |
+| Amazon CloudWatch | Lambda execution logs |
 
 ---
 
 ## Frontend hosting
 
-The frontend is a React application deployed on Netlify.
-
-Netlify hosts the user interface and redirects all frontend routes to the React application using:
-
-```text
-frontend/public/_redirects
-```
-
-This allows direct access to routes such as:
-
-```text
-/vote/{pollId}
-/results/{pollId}
-/share/{pollId}
-```
+React application deployed on Netlify with `_redirects` rule for SPA routing.
 
 ---
 
-## Architecture summary
+## Architecture pattern
 
 ```text
 User Browser
    ↓
-Netlify React Frontend
+Netlify (React SPA)
    ↓
-Amazon API Gateway
+API Gateway (HTTP API)
    ↓
-AWS Lambda
+Lambda (serverless functions)
    ↓
 DynamoDB / S3 / SNS
-   ↓
-EventBridge scheduled trigger
+              ↑
+EventBridge → checkExpired Lambda
 ```
 
 ---
 
-## Data storage
+## Important note for testing
 
-### DynamoDB
-
-DynamoDB stores:
-
-- users;
-- polls;
-- votes.
-
-Polls include fields such as:
-
-- `pollId`;
-- `ownerId`;
-- `title`;
-- `description`;
-- `options`;
-- `closesAt`;
-- `status`;
-- `imageUrl`;
-- `createdAt`.
-
-Votes include:
-
-- `voteId`;
-- `pollId`;
-- `voterId`;
-- selected option;
-- vote date.
+Users registered **before phase 9** cannot receive result emails unless they
+re-register or the notification subscription is manually created for them.
+For end-to-end notification testing, **create a new user account with a real,
+accessible email address**.
 
 ---
 
-### S3
+## Known limitations
 
-S3 stores images associated with polls.
-
-Images are optional.
-
-Image metadata is stored in DynamoDB:
-
-```text
-imageUrl
-imageKey
-imageContentType
-```
-
----
-
-## Security decisions
-
-Private management actions require a user identifier.
-
-Protected actions include:
-
-- edit poll;
-- delete poll;
-- close poll;
-- list own polls.
-
-Public actions include:
-
-- view poll;
-- vote;
-- view results;
-- open share page.
-
-The QR Code only links to the public voting route.
-
----
-
-## Limitations
-
-Current limitations:
-
-- authentication is simple and not based on Amazon Cognito;
-- image editing after poll creation is not implemented;
-- SNS topic sends emails to confirmed subscribers, not dynamically to each individual user;
-- public S3 image access depends on bucket/object configuration;
-- no real-time WebSocket result updates;
-- vote identity is browser-based, not account-based.
+- Custom authentication (not Amazon Cognito).
+- Notification status stays `pending` in UI after confirming SNS email until
+  re-login (DynamoDB not updated automatically on confirmation).
+- Conflict error if same email already has an SNS subscription with different
+  attributes — user must delete old subscription and toggle again.
+- Image editing after poll creation not supported.
+- No WebSocket real-time updates.
+- Vote identity is browser-session-based, not account-based.
 
 ---
 
 ## Possible future improvements
 
-Future improvements could include:
-
-- Amazon Cognito authentication;
-- S3 pre-signed URLs for direct image upload;
-- Amazon SES for per-user email delivery;
-- WebSocket API for real-time results;
-- CloudWatch dashboard with custom metrics;
-- SQS queue for vote processing;
-- better admin panel;
-- image replacement when editing polls;
-- export reports from dashboard.
-
----
-
-## Final conclusion
-
-PollNow demonstrates a complete serverless polling application using multiple AWS services.
-
-The project includes a functional frontend, serverless backend, persistent storage, image handling, notifications and scheduled processing.
-
-It is suitable as an academic AWS project because it uses several cloud services with a clear purpose and integrates them into a practical application.
+- Amazon Cognito for authentication.
+- WebSocket API for real-time results.
+- S3 pre-signed URLs for direct image upload.
+- Image editing when updating polls.
+- SQS for vote processing decoupling.
+- Automatic DynamoDB update when SNS subscription is confirmed (SNS → Lambda → DynamoDB).
+- CloudWatch dashboard with custom metrics.
