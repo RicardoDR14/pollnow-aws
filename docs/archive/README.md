@@ -1,22 +1,13 @@
 # Documentation Archive
 
-This archive preserves historical implementation notes, phase checklists and notification runbooks from the development of PollNow.
+This archive contains historical development material that is useful for traceability but is not part of the main evaluator-facing documentation.
 
-The main evaluator-facing documentation is one level up in [`docs/`](../).
+The final documentation is in the parent [`docs/`](../) directory and is organized as numbered deliverables.
 
-## Archived files
+## Contents
 
-- [`Phase 1 Frontend Auth Checklist.md`](Phase%201%20Frontend%20Auth%20Checklist.md)
-- [`RUNBOOK-ses-email-notifications.md`](RUNBOOK-ses-email-notifications.md)
-- [`RUNBOOK-sns-owner-notifications.md`](RUNBOOK-sns-owner-notifications.md)
-- [`aws-phase-1-auth-and-user-polls.md`](aws-phase-1-auth-and-user-polls.md)
-- [`email-notifications-ses.md`](email-notifications-ses.md)
-- [`owner-notifications-sns.md`](owner-notifications-sns.md)
-- [`phase-2-manage-polls.md`](phase-2-manage-polls.md)
-- [`phase-3-qr-code-sharing.md`](phase-3-qr-code-sharing.md)
-- [`phase-4-ux-vote-fixes.md`](phase-4-ux-vote-fixes.md)
-- [`phase-5-sns-action-notifications.md`](phase-5-sns-action-notifications.md)
-- [`phase-6-ui-polish-share-page.md`](phase-6-ui-polish-share-page.md)
-- [`phase-7-optional-poll-images.md`](phase-7-optional-poll-images.md)
-- [`phase-8-final-polish-and-docs.md`](phase-8-final-polish-and-docs.md)
-- [`phase-9-sns-owner-notifications.md`](phase-9-sns-owner-notifications.md)
+- [`phases/`](phases/) - phase-by-phase implementation notes and historical checklists created while the project was being built.
+- [`old-approaches/`](old-approaches/) - older notification approaches and reference runbooks, including SES-related material and previous SNS notes.
+- [`RUNBOOK-sns-owner-notifications.md`](RUNBOOK-sns-owner-notifications.md) - historical SNS owner notification runbook kept for reference.
+
+These files are archived so the main documentation folder stays focused on the final deliverables while preserving the project history.

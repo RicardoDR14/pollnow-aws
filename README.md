@@ -44,13 +44,16 @@ docs/      Final project documentation
 
 ## Documentation
 
-The main documentation for evaluation is in [`docs/`](docs/):
+The main documentation for evaluation is organized as numbered deliverables:
 
-- [`final-project-summary.md`](docs/final-project-summary.md) - final feature and service summary.
-- [`final-architecture.md`](docs/final-architecture.md) - architecture, routes, Lambda responsibilities and AWS resources.
-- [`final-test-checklist.md`](docs/final-test-checklist.md) - manual validation checklist for presentation/testing.
+- [`01-project-summary.md`](docs/01-project-summary.md) - final feature and service summary.
+- [`02-architecture.md`](docs/02-architecture.md) - architecture, routes, Lambda responsibilities and AWS resources.
+- [`03-aws-deployment-guide.md`](docs/03-aws-deployment-guide.md) - AWS resources, configuration and deployment order.
+- [`04-final-test-checklist.md`](docs/04-final-test-checklist.md) - manual validation checklist for presentation/testing.
+- [`05-known-limitations.md`](docs/05-known-limitations.md) - current limitations and recommended production improvements.
+- [`06-presentation-notes.md`](docs/06-presentation-notes.md) - presentation structure, demo flow and talking points.
 
-Older phase-by-phase implementation notes and runbooks were preserved in [`docs/archive/`](docs/archive/) for traceability.
+Historical phase notes and old approaches are preserved in [`docs/archive/`](docs/archive/) for traceability.
 
 ## Local frontend build check
 
